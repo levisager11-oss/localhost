@@ -319,7 +319,7 @@ dialog .strong { color: var(--text); font-weight: 500; }
 .toast > span:last-child { padding: 8px 12px; font-weight: 500; }
 @keyframes slide { from { transform: translateX(12px); opacity: 0; } }
 
-/* ----- Medium, and Toki's game frame on a laptop: everything a bit tighter ----- */
+/* ----- Medium, or shown in a small frame on another site: everything a bit tighter ----- */
 @media (max-width: 1180px), (max-height: 700px) {
   :root { --alerts: 216px; }
   .toolbar { padding: 4px 8px; gap: 4px 12px; }
@@ -371,7 +371,7 @@ dialog .strong { color: var(--text); font-weight: 500; }
   #toasts { right: 8px; top: 84px; }
 }
 
-/* Toki's frame on a phone is small and low: the toolbar scrolls away, the alert stays. */
+/* A small, low frame on a phone: the toolbar scrolls away, the alert stays. */
 @media (max-width: 820px) and (max-height: 520px) {
   .toolbar { position: static; }
   .stage { height: 130px; }

@@ -1,13 +1,15 @@
 # localhost
 
-An idle game for [Toki](https://playtoki.app). You start with a Raspberry Pi in your bedroom and
+An idle game for the browser. You start with a Raspberry Pi in your bedroom and
 end with a hyperscale datacenter. Buy machines, keep power and cooling in balance, and watch your
 uptime. Now and then an alert fires (a DDoS attack, a full disk, a deploy on Friday afternoon):
 click it away in time, or everything goes down.
 
 It looks like a monitoring dashboard (think Grafana), has sound, and is in English and German.
 
-![The game: a dashboard with revenue, power, temperature and uptime, the picture of your machines, and an alert firing](game/shots/1.png)
+![The game: a dashboard with revenue, power, temperature and uptime, the picture of your machines, and an alert firing](docs/screenshot.png)
+
+![Late in the game: a Dyson swarm around the Sun](docs/screenshot-late.png)
 
 ## How it plays
 
@@ -56,44 +58,18 @@ npm test
 
 | Path | What |
 | --- | --- |
-| `game/` | The game as Toki serves it: `index.html`, `style.css`, the cover and screenshots |
+| `game/` | The game: `index.html`, `style.css`, the scripts and the font. This folder is all a web server needs |
 | `game/js/data.js` | Every number: prices, income, power, alerts. Change the balance here |
 | `game/js/sim.js` | The rules, without any screen (the tests run these) |
 | `game/js/i18n.js` | Every text, English and German |
-| `game/js/main.js` | The screen, saving, and what the game tells Toki |
+| `game/js/main.js` | The screen: drawing, clicks and saving |
 | `game/js/scene.js` | The pixel picture of your machines, one place per stage |
 | `game/js/chart.js` | The graph and the gauges of the dashboard |
 | `game/js/audio.js` | The sounds, made in the browser (no sound files) |
 | `game/fonts/` | The Inter font (SIL Open Font License, see `LICENSE.txt` there) |
-| `toki.json` | What Toki shows about the game: texts, achievements, high-score lists |
-| `tests/` | Tests for the rules, the texts and `toki.json` |
+| `tests/` | Tests for the rules and the texts |
+| `docs/` | Screenshots for this page |
 
-## On Toki
+## Saving
 
-The game follows [Toki's guide for games](https://www.playtoki.app/agents.md):
-
-- **Saves**: the game keeps its progress in `localStorage` under one key (`localhost.save`).
-  Toki's save script copies that into the player's account by itself.
-- **High scores**: three lists. The main one is the score (1000 points for every ten times more
-  money earned in total, so it fits Toki's limit however long someone plays), `streak` is the
-  longest time without an outage, and `speedrun` the fastest time to a hyperscale region.
-- **Achievements**: 30 (the most Toki allows), listed in `toki.json`. Toki shows "Achievement
-  unlocked" itself.
-
-### Putting it on Toki
-
-The easiest way: on Toki, add the game under **My games → Add game** and choose
-**From GitHub** with this repository and the `main` branch. `toki.json` tells Toki that the game is in the `game` folder,
-and from then on every push to `main` updates the game.
-
-Or with an upload key (from **My games → Upload keys** on Toki):
-
-```bash
-curl -fsSL https://www.playtoki.app/toki-upload.mjs -o toki-upload.mjs
-```
-
-```bash
-TOKI_KEY="toki_…" node toki-upload.mjs
-```
-
-For a new version with news for players, raise `version` in `toki.json` and write `notes`.
+The game keeps its progress in the browser's `localStorage`, under the one key `localhost.save`.
