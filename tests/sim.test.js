@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { ACHIEVEMENT_ICONS, ACHIEVEMENTS, COOLING, INCIDENTS, POWER, STAFF, STAGES, TIERS, UPGRADES } from "../game/js/data.js";
+import { ACHIEVEMENT_ICONS, ACHIEVEMENTS, COOLING, INCIDENTS, PERKS, POWER, STAFF, STAGES, TIERS, UPGRADES } from "../game/js/data.js";
 import {
-  applyOffline, buy, buyUpgrade, canExit, click, costFor, derive, deserialize, exit, exitShares, incidentAction, incidentDef,
-  maxAffordable, milestoneMult, newState, score, serialize, slaMult, tick,
+  applyOffline, beginRun, buy, buyPerk, buyUpgrade, canExit, click, costFor, derive, deserialize, exit, exitShares, freeShares,
+  incidentAction, incidentDef, maxAffordable, milestoneMult, newState, perkCost, score, serialize, slaMult, tick, upgradeOffered,
 } from "../game/js/sim.js";
-import { TEXTS } from "../game/js/i18n.js";
+import { setLang, TEXTS, upgradeText } from "../game/js/i18n.js";
 
 /** A random source that always says the same: the tests decide what "random" means. */
 const fixed = (v) => () => v;
@@ -176,6 +176,7 @@ test("coming back after a while pays for the time away, capped", () => {
   const day = applyOffline(s, 3600_000 + 48 * 3600_000);
   assert.equal(day.seconds, 8 * 3600);
   assert.equal(day.capped, true);
+  assert.ok(s.ach.includes("away"));
   const short = applyOffline(s, s.lastSeen + 5000);
   assert.equal(short.long, false);
   assert.equal(short.efficiency, 1);
@@ -198,6 +199,76 @@ test("an exit starts over with stock options", () => {
   assert.deepEqual(next.ach, ["hello-world"]);
   assert.equal(next.stats.exits, 1);
   assert.ok(Math.abs(derive(next).rate - 0.25 * 1.4) < 1e-9);
+  assert.equal(next.reborn, true);
+});
+
+test("upgrades make the time away pay more and count longer", () => {
+  const s = newState(0);
+  s.hw.laptop = 1;
+  assert.equal(derive(s).awayShare, 0.25);
+  assert.equal(derive(s).awayHours, 8);
+  s.up = ["logrotate", "phone", "selfheal"];
+  assert.ok(Math.abs(derive(s).awayShare - 0.6) < 1e-9);
+  assert.equal(derive(s).awayHours, 24);
+  const out = applyOffline(s, 48 * 3600_000);
+  assert.equal(out.seconds, 24 * 3600);
+  assert.ok(Math.abs(out.efficiency - 0.6) < 1e-9);
+  s.up.push("lightsoff");
+  s.perks.nightshift = 3;
+  assert.equal(derive(s).awayShare, 1, "never more than everything");
+  assert.equal(derive(s).awayHours, 72);
+});
+
+test("a machine's own upgrades appear once you own enough, and multiply only that machine", () => {
+  const s = newState(0);
+  const tune = UPGRADES.find((u) => u.id === "tune-pi");
+  s.money = 1e9;
+  assert.equal(upgradeOffered(s, tune), false);
+  assert.equal(buyUpgrade(s, "tune-pi"), false);
+  s.hw.pi = 15;
+  s.hw.laptop = 1;
+  const before = derive(s).baseRev;
+  assert.equal(upgradeOffered(s, tune), true);
+  assert.equal(buyUpgrade(s, "tune-pi"), true);
+  assert.ok(Math.abs(derive(s).baseRev - (before + 15 * 0.25 * 2)) < 1e-9);
+});
+
+test("reincarnation upgrades cost stock options and shape the next life", () => {
+  let s = newState(0);
+  assert.equal(buyPerk(s, "seed"), false, "no stock options yet");
+  s.runEarned = s.totalEarned = 1e12;
+  s = exit(s, 10);
+  assert.equal(s.shares, 100);
+  assert.equal(buyPerk(s, "discount"), false, "builds on seed money");
+  assert.equal(buyPerk(s, "seed"), true);
+  assert.equal(buyPerk(s, "seed"), true);
+  assert.equal(buyPerk(s, "starter"), true);
+  assert.equal(buyPerk(s, "discount"), true);
+  assert.equal(buyPerk(s, "autoinfra"), true);
+  assert.equal(freeShares(s), 100 - 5 - 50 - 3 - 10 - 25);
+  assert.equal(buyPerk(s, "discount"), false, "can't pay for the next level");
+  assert.equal(s.shares, 100, "spending doesn't cost the income bonus");
+  assert.equal(s.money, 0);
+  beginRun(s, 20);
+  assert.equal(s.reborn, false);
+  assert.equal(s.money, 1e6);
+  assert.equal(s.hw.pi, 10);
+  assert.equal(s.pw.strip, 1);
+  assert.ok(Math.abs(costFor("hw", "pi", 0, 1, 0.95) - 15 * 0.95) < 1e-9);
+  const money = s.money;
+  buy(s, "hw", "laptop", 1);
+  assert.ok(Math.abs(money - s.money - 150 * 0.95) < 1e-9);
+  // The procurement bot keeps the power up.
+  s.money = 1e6;
+  s.hw.laptop = 40;
+  s.nextIncident = 1e9;
+  for (let i = 0; i < 40; i++) tick(s, 0.25, () => 0.5);
+  assert.ok(derive(s).load <= 0.9 && derive(s).coolLoad <= 0.9, "bought power and cooling by itself");
+  assert.ok(s.ach.includes("perk"));
+  const again = deserialize(serialize(s));
+  assert.deepEqual(again.perks, s.perks);
+  assert.equal(deserialize(JSON.stringify({ shares: 4, perks: { seed: 4, starter: 3 } })).perks.seed ?? 0, 0, "a save can't spend what it never had");
+  for (const p of PERKS) assert.ok(perkCost(newState(0), p.id) > 0);
 });
 
 test("the score fits Toki's leaderboard", () => {
@@ -256,8 +327,8 @@ test("a long game stays sane", () => {
 
 test("every thing in the game has its texts in both languages", () => {
   const need = [];
-  for (const [p, list] of [["hw", TIERS], ["pw", POWER], ["cl", COOLING], ["st", STAFF], ["up", UPGRADES]]) {
-    for (const x of list) need.push(`${p}.${x.id}.name`, `${p}.${x.id}.desc`, ...(p === "up" ? [`up.${x.id}.fx`] : []));
+  for (const [p, list] of [["hw", TIERS], ["pw", POWER], ["cl", COOLING], ["st", STAFF], ["up", UPGRADES.filter((u) => !u.tier)], ["perk", PERKS]]) {
+    for (const x of list) need.push(`${p}.${x.id}.name`, `${p}.${x.id}.desc`, ...(p === "up" || p === "perk" ? [`${p}.${x.id}.fx`] : []));
   }
   for (const i of INCIDENTS) {
     need.push(`inc.${i.id}.title`, `inc.${i.id}.desc`, `inc.${i.id}.ok`);
@@ -271,6 +342,16 @@ test("every thing in the game has its texts in both languages", () => {
     for (const k of need) assert.ok(typeof TEXTS[lang][k] === "string" && TEXTS[lang][k], `${lang}: ${k}`);
   }
   assert.deepEqual(Object.keys(TEXTS.de).sort(), Object.keys(TEXTS.en).sort());
+  for (const lang of ["en", "de"]) {
+    setLang(lang);
+    for (const u of UPGRADES) {
+      for (const field of ["name", "desc", "fx"]) {
+        const text = upgradeText(u, field);
+        assert.ok(text && !text.includes("{") && !text.startsWith("up."), `${lang}: ${u.id} ${field}: ${text}`);
+      }
+    }
+  }
+  setLang("en");
 });
 
 test("toki.json lists the game's achievements and boards", () => {

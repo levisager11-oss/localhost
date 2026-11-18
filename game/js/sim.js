@@ -1,5 +1,5 @@
 // The game's rules, without any screen: the same code runs in the browser and in the tests.
-import { ACHIEVEMENTS, BASE_COOLING, BASE_POWER, COOLING, GROWTH, INCIDENTS, MILESTONES, POWER, STAFF, STAGES, TIERS, UPGRADES } from "./data.js";
+import { ACHIEVEMENTS, BASE_COOLING, BASE_POWER, COOLING, GROWTH, INCIDENTS, MILESTONES, PERKS, POWER, STAFF, STAGES, TIERS, UPGRADES } from "./data.js";
 
 export const SAVE_VERSION = 1;
 /** Seconds the temperature needs to follow the load, and the uptime to forget an outage. */
@@ -9,13 +9,17 @@ const START_UPTIME = 0.995;
 /** Above this the machines slow down; at HOT they barely run and count as partly down. */
 export const TEMP_OK = 35;
 export const TEMP_HOT = 50;
-/** Each stock option from an exit adds this much income. */
-export const SHARE_BONUS = 0.02;
+/** Each stock option from an exit adds this much income (more with the dividends upgrade). */
+const SHARE_BONUS = 0.02;
 /** An exit needs at least this many new stock options. */
 export const MIN_EXIT_SHARES = 10;
 /** Away for longer than this counts as "offline": you get a summary when you come back. */
 export const OFFLINE_MIN = 60;
-export const OFFLINE_MAX = 8 * 3600;
+/** Hours away that count, before any upgrade. */
+export const OFFLINE_HOURS = 8;
+/** What the machines earn while you are away with nobody on call, and what full cover adds. */
+const AWAY_BASE = 0.25;
+const AWAY_STAFF = 0.65;
 /** Toki keeps scores up to this. */
 const MAX_SCORE = 1_000_000_000_000;
 
@@ -23,6 +27,7 @@ const KINDS = { hw: TIERS, pw: POWER, cl: COOLING, st: STAFF };
 const byId = (list) => Object.fromEntries(list.map((x) => [x.id, x]));
 const UPGRADE = byId(UPGRADES);
 const INCIDENT = byId(INCIDENTS);
+const PERK = byId(PERKS);
 export const incidentDef = (id) => INCIDENT[id];
 
 const counts = (list) => Object.fromEntries(list.map((x) => [x.id, 0]));
@@ -42,7 +47,12 @@ export function newState(now = Date.now()) {
     temp: 22,
     // A new service has no track record yet: the nines must be earned.
     uptime: START_UPTIME,
+    /** Stock options ever received; each adds income. Perks are paid from them. */
     shares: 0,
+    /** Reincarnation upgrade id → level */
+    perks: {},
+    /** Just sold the company: the new life waits for the reincarnation screen to be closed. */
+    reborn: false,
     /** Seconds left of a full outage */
     outage: 0,
     incident: null,
@@ -58,18 +68,35 @@ export function newState(now = Date.now()) {
   };
 }
 
-/** All upgrade effects multiplied together. */
+/** Every effect of upgrades and perks, multiplied (or added) together. */
 function effects(s) {
-  const fx = { rev: 1, click: 1, draw: 1, cool: 1, rate: 1, time: 1, recover: 1, backups: false, mash: {} };
+  const fx = { rev: 1, click: 1, draw: 1, cool: 1, rate: 1, time: 1, recover: 1, backups: false, mash: {}, tier: {}, away: 0, hours: OFFLINE_HOURS };
   for (const id of s.up) {
-    const u = UPGRADE[id]?.fx;
+    const def = UPGRADE[id];
+    const u = def?.fx;
     if (!u) continue;
     for (const k of ["rev", "click", "draw", "cool", "rate", "time", "recover"]) if (u[k]) fx[k] *= u[k];
     if (u.backups) fx.backups = true;
     if (u.mash) for (const k in u.mash) fx.mash[k] = (fx.mash[k] ?? 1) * u.mash[k];
+    if (u.tier) fx.tier[def.tier] = (fx.tier[def.tier] ?? 1) * u.tier;
+    if (u.away) fx.away += u.away;
+    if (u.hours) fx.hours = Math.max(fx.hours, u.hours);
   }
+  const p = s.perks;
+  fx.time *= 1 + PERK.runbooks.per * (p.runbooks ?? 0);
+  fx.reward = 1 + PERK.bonus.per * (p.bonus ?? 0);
+  fx.away += PERK.nightshift.per * (p.nightshift ?? 0);
+  fx.price = 1 - PERK.discount.per * (p.discount ?? 0);
+  fx.upPrice = 1 - PERK.notes.per * (p.notes ?? 0);
+  fx.share = shareBonus(s);
+  fx.luck = 1 + (p.luck ?? 0);
+  fx.autoclick = p.autoclick ? PERK.autoclick.values[p.autoclick - 1] : 0;
+  fx.autoinfra = !!p.autoinfra;
   return fx;
 }
+
+/** What one stock option adds to the income. */
+export const shareBonus = (s) => SHARE_BONUS + PERK.dividends.per * (s.perks.dividends ?? 0);
 
 /** How much each machine of a kind earns more, by how many you own (×2 per milestone). */
 export function milestoneMult(count) {
@@ -111,8 +138,9 @@ export function derive(s) {
   let baseRev = 0;
   for (const t of TIERS) {
     const n = s.hw[t.id];
+    if (!n) continue;
     draw += n * t.power;
-    baseRev += n * t.rev * milestoneMult(n);
+    baseRev += n * t.rev * milestoneMult(n) * (fx.tier[t.id] ?? 1);
   }
   draw *= fx.draw * (s.boost?.draw ?? 1);
   let powerCap = BASE_POWER;
@@ -140,7 +168,7 @@ export function derive(s) {
   if (pending.avail != null) avail = Math.min(avail, pending.avail);
   if (s.outage > 0) avail = 0;
 
-  const structural = baseRev * fx.rev * (1 + SHARE_BONUS * s.shares) * powerFactor;
+  const structural = baseRev * fx.rev * (1 + fx.share * s.shares) * powerFactor;
   const sla = slaMult(s.uptime);
   /** Income without the incident or spike of the moment */
   const nominal = structural * thermalFactor * sla;
@@ -148,10 +176,13 @@ export function derive(s) {
   const steady = structural * thermal(targetTemp) * sla;
   const rate = s.outage > 0 ? 0 : nominal * (pending.rev ?? 1) * (s.boost?.rev ?? 1);
   const clickValue = fx.click * (1 + 0.004 * nominal);
+  /** The share of the income the machines keep earning while the game is closed */
+  const awayShare = Math.min(1, AWAY_BASE + AWAY_STAFF * coverage + fx.away);
 
   return {
     fx, draw, powerCap, coolCap, load, coolLoad, targetTemp, powerFactor, thermalFactor, ops, opsNeeded, coverage,
-    avail, baseRev, nominal, steady, rate, sla, clickValue, tier, stage: TIERS[tier].stage, stageIndex: STAGES.indexOf(TIERS[tier].stage),
+    avail, baseRev, nominal, steady, rate, sla, clickValue, awayShare, awayHours: fx.hours,
+    tier, stage: TIERS[tier].stage, stageIndex: STAGES.indexOf(TIERS[tier].stage),
   };
 }
 
@@ -167,31 +198,35 @@ function earn(s, amount) {
 
 // ----- Buying -----
 
+/** What you pay of the list price: hardware gets cheaper with the discount perk. */
+export const priceMult = (s, kind) => (kind === "hw" ? 1 - PERK.discount.per * (s.perks.discount ?? 0) : 1);
+
 /** The price of the next n of something you own `owned` of. */
-export function costFor(kind, id, owned, n = 1) {
+export function costFor(kind, id, owned, n = 1, mult = 1) {
   const item = KINDS[kind].find((x) => x.id === id);
   const g = GROWTH[kind];
-  return item.cost * g ** owned * ((g ** n - 1) / (g - 1));
+  return item.cost * mult * g ** owned * ((g ** n - 1) / (g - 1));
 }
 /** How many you can pay for right now. */
-export function maxAffordable(kind, id, owned, money) {
+export function maxAffordable(kind, id, owned, money, mult = 1) {
   const item = KINDS[kind].find((x) => x.id === id);
   const g = GROWTH[kind];
-  const first = item.cost * g ** owned;
+  const first = item.cost * mult * g ** owned;
   if (money < first) return 0;
   const n = Math.floor(Math.log(1 + (money * (g - 1)) / first) / Math.log(g));
   // Rounding can be off by one at the edge.
-  return costFor(kind, id, owned, n) <= money ? n : Math.max(0, n - 1);
+  return costFor(kind, id, owned, n, mult) <= money ? n : Math.max(0, n - 1);
 }
 
 /** Buys up to n (or as many as the money allows for "max"); returns how many it bought. */
 export function buy(s, kind, id, n = 1, now = Date.now()) {
   if (!KINDS[kind]?.some((x) => x.id === id)) return 0;
   const owned = s[kind][id];
-  const can = maxAffordable(kind, id, owned, s.money);
+  const mult = priceMult(s, kind);
+  const can = maxAffordable(kind, id, owned, s.money, mult);
   const want = n === "max" ? can : Math.min(n, can);
   if (want < 1 || (n !== "max" && want < n)) return 0;
-  s.money -= costFor(kind, id, owned, want);
+  s.money -= costFor(kind, id, owned, want, mult);
   s[kind][id] += want;
   // The first hyperscale region of this run: the time since the run began, if it's a record.
   if (kind === "hw" && id === "region" && owned === 0) {
@@ -201,10 +236,20 @@ export function buy(s, kind, id, n = 1, now = Date.now()) {
   return want;
 }
 
+/** Whether an upgrade is on offer: a machine's upgrades once you own enough of it, the others once you could nearly pay for them. */
+export function upgradeOffered(s, u) {
+  if (s.up.includes(u.id)) return false;
+  return u.tier ? s.hw[u.tier] >= u.need : s.runEarned >= u.cost * 0.2;
+}
+
+/** What an upgrade costs you (less with the old notes). */
+export const upgradeCost = (s, u) => u.cost * (1 - PERK.notes.per * (s.perks.notes ?? 0));
+
 export function buyUpgrade(s, id) {
   const u = UPGRADE[id];
-  if (!u || s.up.includes(id) || s.money < u.cost) return false;
-  s.money -= u.cost;
+  if (!u || s.up.includes(id) || s.money < upgradeCost(s, u)) return false;
+  if (u.tier && s.hw[u.tier] < u.need) return false;
+  s.money -= upgradeCost(s, u);
   s.up.push(id);
   return true;
 }
@@ -215,6 +260,48 @@ export function click(s) {
   s.stats.clicks++;
   earn(s, v);
   return v;
+}
+
+// ----- Perks: lasting advantages for stock options -----
+
+/** Stock options already spent on perks. */
+export function spentShares(s) {
+  let n = 0;
+  for (const p of PERKS) for (let l = 0; l < (s.perks[p.id] ?? 0); l++) n += p.costs[l];
+  return n;
+}
+export const freeShares = (s) => s.shares - spentShares(s);
+/** The price of a perk's next level, or null when it has them all. */
+export const perkCost = (s, id) => PERK[id]?.costs[s.perks[id] ?? 0] ?? null;
+/** Whether the upgrade it builds on is there. */
+export function perkOpen(s, id) {
+  const needs = PERK[id]?.needs;
+  return !needs || (s.perks[needs.id] ?? 0) >= needs.level;
+}
+
+export function buyPerk(s, id) {
+  const cost = perkCost(s, id);
+  if (cost == null || freeShares(s) < cost || !perkOpen(s, id)) return false;
+  s.perks[id] = (s.perks[id] ?? 0) + 1;
+  return true;
+}
+
+/** With the procurement bot: buys power and cooling before they run out. */
+function autoInfra(s, d) {
+  const best = (kind, list) => {
+    let pick = null;
+    let value = Infinity;
+    for (const item of list) {
+      const cost = costFor(kind, item.id, s[kind][item.id]);
+      if (cost <= s.money && cost / item.cap < value) {
+        value = cost / item.cap;
+        pick = item;
+      }
+    }
+    if (pick) buy(s, kind, pick.id, 1);
+  };
+  if (d.load > 0.9) best("pw", POWER);
+  if (d.coolLoad > 0.9) best("cl", COOLING);
 }
 
 // ----- Incidents -----
@@ -228,10 +315,12 @@ function spawn(s, rng, ev) {
   const d = derive(s);
   const fit = INCIDENTS.filter((i) => d.tier >= i.min && d.tier <= (i.max ?? 99) && i.id !== s.lastIncident);
   if (!fit.length) return schedule(s, rng, d.fx);
-  let roll = rng() * fit.reduce((n, i) => n + (i.weight ?? 1), 0);
+  // Good news comes more often with friends in the right places.
+  const weight = (i) => (i.weight ?? 1) * (i.good ? d.fx.luck : 1);
+  let roll = rng() * fit.reduce((n, i) => n + weight(i), 0);
   let def = fit[fit.length - 1];
   for (const i of fit) {
-    roll -= i.weight ?? 1;
+    roll -= weight(i);
     if (roll < 0) {
       def = i;
       break;
@@ -254,7 +343,7 @@ function resolve(s, def, rng, ev, how = "ok", mult = 1) {
     if (def.boost) s.boost = { rev: def.boost.rev, draw: def.boost.draw, left: def.boost.time };
     if (def.cash) reward = Math.max(50, def.cash * d.nominal);
   } else if (how !== "auto") {
-    reward = Math.max(10, def.reward * d.nominal) * mult;
+    reward = Math.max(10, def.reward * d.nominal) * mult * d.fx.reward;
     s.stats.resolved++;
   } else {
     s.stats.auto++;
@@ -324,17 +413,26 @@ function checkAchievements(s, d, ev) {
   if (has("cage")) unlock(s, "colo", ev);
   if (has("hall")) unlock(s, "datacenter", ev);
   if (has("region")) unlock(s, "hyperscaler", ev);
+  if (has("orbit")) unlock(s, "into-orbit", ev);
+  if (has("moon")) unlock(s, "moon", ev);
+  if (has("dyson")) unlock(s, "dyson", ev);
+  if (has("simulation")) unlock(s, "simulation", ev);
   if (s.uptime >= 0.999) unlock(s, "three-nines", ev);
   if (s.uptime >= 0.99999) unlock(s, "five-nines", ev);
   if (s.temp >= TEMP_HOT) unlock(s, "space-heater", ev);
   if (d.load > 1) unlock(s, "breaker", ev);
   if (s.stats.resolved >= 50) unlock(s, "firefighter", ev);
   if (s.stats.resolved >= 250) unlock(s, "on-call-hero", ev);
+  if (s.stats.clicks >= 10_000) unlock(s, "carpal", ev);
   if (s.up.includes("ipv6")) unlock(s, "ipv6", ev);
+  if (s.up.length >= 40) unlock(s, "patched", ev);
   if (d.coverage >= 1 && d.tier >= 3) unlock(s, "sleep", ev);
   if (s.totalEarned >= 1e6) unlock(s, "millionaire", ev);
   if (s.totalEarned >= 1e9) unlock(s, "unicorn", ev);
   if (s.stats.exits > 0) unlock(s, "exit", ev);
+  if (s.stats.exits >= 5) unlock(s, "serial", ev);
+  if (PERKS.some((p) => s.perks[p.id] > 0)) unlock(s, "perk", ev);
+  if (TIERS.some((t) => s.hw[t.id] >= 100)) unlock(s, "fleet", ev);
 }
 
 // ----- Time -----
@@ -363,11 +461,17 @@ export function tick(s, dt, rng = Math.random, ev = []) {
     spawn(s, rng, ev);
   }
 
-  const d = derive(s);
+  let d = derive(s);
+  if (d.fx.autoinfra && (d.load > 0.9 || d.coolLoad > 0.9)) {
+    autoInfra(s, d);
+    d = derive(s);
+  }
   s.temp += (d.targetTemp - s.temp) * (1 - Math.exp(-dt / TEMP_TAU));
   const tau = d.avail >= s.uptime ? UPTIME_TAU / d.fx.recover : UPTIME_TAU;
   s.uptime = Math.min(1, Math.max(0, s.uptime + (d.avail - s.uptime) * (1 - Math.exp(-dt / tau))));
   earn(s, d.rate * dt);
+  // The macro keyboard handles requests by itself (not while everything is down).
+  if (d.fx.autoclick && s.outage <= 0) earn(s, d.clickValue * d.fx.autoclick * dt);
   s.stats.played += dt;
   if (s.outage <= 0) {
     s.stats.streak += dt;
@@ -379,9 +483,9 @@ export function tick(s, dt, rng = Math.random, ev = []) {
 
 /**
  * The time the game was closed or hidden: the machines kept earning, but nobody clicked
- * incidents away. How well that went depends on your staff. Returns a summary.
+ * incidents away. How well that went depends on your staff and upgrades. Returns a summary.
  */
-export function applyOffline(s, now = Date.now()) {
+export function applyOffline(s, now = Date.now(), ev = []) {
   const away = Math.max(0, (now - s.lastSeen) / 1000);
   s.lastSeen = now;
   // Whatever was on fire when you left is over by now.
@@ -389,8 +493,9 @@ export function applyOffline(s, now = Date.now()) {
   if (away < 1) return { seconds: 0, earned: 0, efficiency: 1, long: false };
   const d = derive(s);
   const long = away >= OFFLINE_MIN;
-  const seconds = Math.min(away, OFFLINE_MAX);
-  const efficiency = long ? 0.25 + 0.65 * d.coverage : 1;
+  const max = d.awayHours * 3600;
+  const seconds = Math.min(away, max);
+  const efficiency = long ? d.awayShare : 1;
   if (long) {
     s.outage = 0;
     s.boost = null;
@@ -400,7 +505,8 @@ export function applyOffline(s, now = Date.now()) {
   const earned = (long ? derive(s).steady : d.nominal) * seconds * efficiency;
   earn(s, earned);
   s.stats.played += seconds;
-  return { seconds, earned, efficiency, long, capped: away > OFFLINE_MAX };
+  if (away >= 8 * 3600) unlock(s, "away", ev);
+  return { seconds, earned, efficiency, long, capped: away > max, hours: d.awayHours, staffed: d.coverage > 0 };
 }
 
 // ----- Exit (starting over with a bonus) -----
@@ -411,16 +517,35 @@ export const exitShares = (s) => Math.floor(Math.cbrt(s.runEarned / 1e6));
 export const exitNeeds = (s) => Math.max(0, MIN_EXIT_SHARES ** 3 * 1e6 - s.runEarned);
 export const canExit = (s) => exitShares(s) >= MIN_EXIT_SHARES;
 
-/** Sells the company: everything is gone except stock options, achievements and records. */
+/**
+ * Starts the new life after the reincarnation screen: what the upgrades give you to begin with.
+ */
+export function beginRun(s, now = Date.now()) {
+  if (!s.reborn) return;
+  s.reborn = false;
+  const seed = s.perks.seed ?? 0;
+  if (seed) s.money = PERK.seed.values[seed - 1];
+  if (s.perks.reputation) s.uptime = Math.max(s.uptime, 0.999);
+  const kit = s.perks.starter ? PERK.starter.values[s.perks.starter - 1] : {};
+  for (const kind in kit) for (const id in kit[kind]) s[kind][id] = Math.max(s[kind][id], kit[kind][id]);
+  s.stats.runStart = now;
+  s.lastSeen = now;
+}
+
+/**
+ * Sells the company: everything is gone except stock options, reincarnation upgrades,
+ * achievements and records. The new life starts with beginRun.
+ */
 export function exit(s, now = Date.now()) {
   if (!canExit(s)) return null;
   const fresh = newState(now);
   fresh.shares = s.shares + exitShares(s);
+  fresh.perks = { ...s.perks };
   fresh.totalEarned = s.totalEarned;
   fresh.ach = [...s.ach];
   fresh.stats = { ...fresh.stats, clicks: s.stats.clicks, resolved: s.stats.resolved, failed: s.stats.failed, auto: s.stats.auto, bestStreak: s.stats.bestStreak, exits: s.stats.exits + 1, played: s.stats.played, speedrun: s.stats.speedrun };
-  if (s.lang) fresh.lang = s.lang;
-  if (s.buyMode) fresh.buyMode = s.buyMode;
+  for (const k of ["lang", "buyMode", "muted"]) if (s[k] != null) fresh[k] = s[k];
+  fresh.reborn = true;
   return fresh;
 }
 
@@ -454,6 +579,12 @@ export function deserialize(text, now = Date.now()) {
   s.temp = num(o.temp, 22, 0, 95);
   s.uptime = num(o.uptime, START_UPTIME, 0, 1);
   s.shares = Math.floor(num(o.shares, 0));
+  for (const p of PERKS) {
+    const level = Math.floor(num(o.perks?.[p.id], 0, 0, p.costs.length));
+    if (level) s.perks[p.id] = level;
+  }
+  // A save can't have spent more stock options than it has: drop perks until it fits.
+  for (const p of [...PERKS].reverse()) while (s.perks[p.id] && spentShares(s) > s.shares) s.perks[p.id]--;
   s.outage = num(o.outage, 0, 0, 120);
   s.nextIncident = num(o.nextIncident, 60, 0, 600);
   if (typeof o.lastIncident === "string" && INCIDENT[o.lastIncident]) s.lastIncident = o.lastIncident;
@@ -466,5 +597,7 @@ export function deserialize(text, now = Date.now()) {
   s.lastSeen = num(o.lastSeen, now, 0, now);
   if (o.lang === "en" || o.lang === "de") s.lang = o.lang;
   if (o.buyMode === 1 || o.buyMode === 10 || o.buyMode === "max") s.buyMode = o.buyMode;
+  if (o.muted === true) s.muted = true;
+  if (o.reborn === true) s.reborn = true;
   return s;
 }

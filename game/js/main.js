@@ -1,12 +1,15 @@
 // The screen: draws the dashboard, takes clicks, saves the game, and talks to Toki.
-import { ACHIEVEMENT_ICONS, ACHIEVEMENTS, COOLING, POWER, STAFF, TIERS, UPGRADES } from "./data.js";
+import { ACHIEVEMENT_ICONS, ACHIEVEMENTS, COOLING, PERKS, POWER, STAFF, TIERS, UPGRADES } from "./data.js";
 import {
-  applyOffline, buy, buyUpgrade, canExit, click, costFor, derive, deserialize, exit, exitNeeds, exitShares, incidentAction, incidentDef,
-  maxAffordable, milestoneMult, newState, nextMilestone, score, serialize, SHARE_BONUS, slaTier, TEMP_HOT, TEMP_OK, tick,
+  applyOffline, beginRun, buy, buyPerk, buyUpgrade, canExit, click, costFor, derive, deserialize, exit, exitNeeds, exitShares,
+  freeShares, incidentAction, incidentDef, maxAffordable, milestoneMult, newState, nextMilestone, perkCost, perkOpen, priceMult,
+  score, serialize, shareBonus, slaTier, TEMP_HOT, TEMP_OK, tick, upgradeCost, upgradeOffered,
 } from "./sim.js";
-import { browserLang, FLAVOR, getLang, setLang, t } from "./i18n.js";
+import { browserLang, FLAVOR, getLang, setLang, t, upgradeText } from "./i18n.js";
 import { degrees, duration, money, num, percent, price, uptime, watts } from "./format.js";
-import { createChart } from "./chart.js";
+import { createChart, createGauge } from "./chart.js";
+import { createScene } from "./scene.js";
+import { isMuted, play, setMuted } from "./audio.js";
 
 const KEY = "localhost.save";
 const LISTS = { hw: TIERS, pw: POWER, cl: COOLING, st: STAFF };
@@ -17,6 +20,23 @@ const el = (tag, cls, text) => {
   if (text != null) e.textContent = text;
   return e;
 };
+/** Small line icons, drawn like the ones dashboards use. */
+const ICONS = {
+  check: '<circle cx="8" cy="8" r="6.3"/><path d="M5.3 8.2l1.9 1.9 3.6-3.9"/>',
+  warn: '<path d="M8 2.2l6.3 11H1.7z"/><path d="M8 6.6v3.1M8 11.7v.1"/>',
+  cross: '<circle cx="8" cy="8" r="6.3"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4"/>',
+  bell: '<path d="M4 11V7.5a4 4 0 0 1 8 0V11l1.2 1.5H2.8z"/><path d="M6.6 14a1.5 1.5 0 0 0 2.8 0"/>',
+  star: '<path d="M8 1.8l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.6l-3.8 2 .7-4.3-3.1-3 4.3-.6z"/>',
+  sound: '<path d="M2.5 6.2h2.3L8 3.5v9L4.8 9.8H2.5z"/><path d="M10.5 6a3 3 0 0 1 0 4M12.3 4.2a5.5 5.5 0 0 1 0 7.6"/>',
+  mute: '<path d="M2.5 6.2h2.3L8 3.5v9L4.8 9.8H2.5z"/><path d="M11 6.2l3 3.6M14 6.2l-3 3.6"/>',
+  moon: '<path d="M13.2 9.8A5.6 5.6 0 0 1 6.2 2.8a5.6 5.6 0 1 0 7 7z"/>',
+};
+function icon(name, size = 16) {
+  const span = el("span", "ico");
+  span.innerHTML = `<svg viewBox="0 0 16 16" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+  return span;
+}
+
 /** Inside Toki the game runs in a frame, and Toki shows achievements itself. */
 const inToki = window.parent !== window;
 
@@ -28,6 +48,7 @@ let last = performance.now();
 /** What the last alert ended with, shown for a few seconds */
 let outcome = null;
 let lastStage = null;
+let scene;
 
 // ----- Saving -----
 
@@ -86,11 +107,12 @@ function log(level, text) {
   while (list.children.length > 80) list.lastChild.remove();
 }
 
-function toast(text, icon) {
+function toast(text) {
   const box = el("div", "toast");
-  if (icon) box.append(el("span", "icon", icon));
-  box.append(el("span", null, text));
+  box.append(icon("check"), el("span", null, text));
   $("toasts").append(box);
+  // Never a tower of them: the oldest make room.
+  while ($("toasts").children.length > 3) $("toasts").firstChild.remove();
   setTimeout(() => box.remove(), 5000);
 }
 
@@ -98,11 +120,13 @@ function status(node, level, text) {
   // Nothing changed: leave the page alone (this runs four times a second).
   if (node.dataset.now === `${level}|${text}`) return;
   node.dataset.now = `${level}|${text}`;
-  const icons = { good: "✓", warn: "!", serious: "▲", crit: "✕" };
   node.className = `sub status ${level}`;
   node.textContent = "";
-  node.append(el("i", "dot", icons[level]), el("span", null, text));
+  node.append(icon({ good: "check", warn: "warn", serious: "warn", crit: "cross" }[level], 14), el("span", null, text));
 }
+const setText = (node, text) => {
+  if (node.textContent !== text) node.textContent = text;
+};
 
 // ----- Events from the rules -----
 
@@ -111,6 +135,7 @@ function handle(events) {
     const title = e.id && e.type !== "achievement" ? t(`inc.${e.id}.title`) : "";
     if (e.type === "incident") {
       outcome = null;
+      play(e.good ? "chance" : "alert");
       log(e.good ? "info" : "warn", t(e.good ? "log.chance" : "log.alert", { title }));
     } else if (e.type === "resolved") {
       if (e.how === "auto") {
@@ -121,21 +146,25 @@ function handle(events) {
         log("ok", t("log.resolved", { text, v: money(e.reward) }));
         outcome = { kind: "good", title, text, extra: e.reward ? `+${money(e.reward)}` : "", until: Date.now() + 7000 };
       }
+      play("solved");
       save();
     } else if (e.type === "failed") {
       const text = t(`inc.${e.id}.fail`);
       const more = [e.outage ? t("log.outage", { t: duration(e.outage) }) : "", e.lost ? t("log.lost", { v: money(e.lost) }) : ""].filter(Boolean).join(" ");
       log("crit", `${t("log.failed", { text })} ${more}`.trim());
       outcome = { kind: "crit", title, text, extra: e.lost ? `−${money(e.lost)}` : "", until: Date.now() + 8000 };
+      play("failed");
       save();
     } else if (e.type === "missed") {
       log("info", t("log.missed", { title }));
     } else if (e.type === "recovered") {
+      play("back");
       log("ok", t("log.recovered"));
     } else if (e.type === "achievement") {
       achieved(e.id);
+      play("achievement");
       const name = t(`ach.${e.id}.name`);
-      if (!inToki) toast(t("toast.ach", { name }), ACHIEVEMENT_ICONS[e.id]);
+      if (!inToki) toast(t("toast.ach", { name }));
     }
   }
 }
@@ -146,11 +175,19 @@ function texts() {
   document.documentElement.lang = getLang();
   for (const n of document.querySelectorAll("[data-t]")) n.textContent = t(n.dataset.t);
   $("c-rev").setAttribute("aria-label", t("chart.revenue"));
-  $("c-power").setAttribute("aria-label", t("chart.power"));
-  $("c-temp").setAttribute("aria-label", t("chart.temp"));
+  for (const n of document.querySelectorAll("[data-icon]")) n.replaceChildren(...icon(n.dataset.icon).childNodes);
+  drawSound();
   shopKey = "";
   alertKey = "";
-  rackKey = "";
+}
+
+function drawSound() {
+  const b = $("btn-sound");
+  b.textContent = "";
+  b.append(icon(isMuted() ? "mute" : "sound"));
+  b.setAttribute("aria-label", t(isMuted() ? "top.sound.off" : "top.sound.on"));
+  b.title = b.getAttribute("aria-label");
+  b.setAttribute("aria-pressed", String(!isMuted()));
 }
 
 function drawTop() {
@@ -161,23 +198,31 @@ function drawTop() {
   if (lastStage && lastStage !== d.stage && d.stageIndex > 0) {
     const stage = t(`stage.${d.stage}`);
     log("info", t("log.stage", { stage }));
-    toast(t("log.stage", { stage }), "📦");
+    toast(t("log.stage", { stage }));
+    play("upgrade");
   }
   lastStage = d.stage;
 }
 
+/** The colour a stat wears: green when all is well. */
+const COLOR = { good: "#73bf69", warn: "#fade2a", serious: "#ff9830", crit: "#f2495c" };
+let revColor = COLOR.good;
+const gauges = {};
+
 function drawTiles() {
   $("rev-value").textContent = t("unit.persec", { v: money(d.rate) });
-  $("rev-sub").textContent = t("sla.mult", { m: num(d.sla, true) });
+  revColor = state.outage > 0 ? COLOR.crit : d.rate < d.nominal * 0.999 ? COLOR.serious : COLOR.good;
+  $("rev-value").style.color = revColor;
+  setText($("rev-sub"), t("sla.mult", { m: num(d.sla, true) }));
 
-  $("power-value").textContent = percent(d.load);
-  $("power-sub").textContent = t("power.of", { a: watts(d.draw), b: watts(d.powerCap) });
+  gauges.power.set(d.load / 1.25, percent(d.load));
+  gauges.temp.set((state.temp - 15) / 45, degrees(state.temp));
+  setText($("power-sub"), t("power.of", { a: watts(d.draw), b: watts(d.powerCap) }));
   if (d.load > 1) status($("power-status"), "crit", t("power.over"));
   else if (d.load > 0.85) status($("power-status"), "warn", t("power.tight"));
   else status($("power-status"), "good", t("power.ok"));
 
-  $("temp-value").textContent = degrees(state.temp);
-  $("temp-sub").textContent = t("temp.cooling", { p: percent(d.coolLoad) });
+  setText($("temp-sub"), t("temp.cooling", { p: percent(d.coolLoad) }));
   $("temp-sub").title = t("power.of", { a: watts(Math.min(d.draw, d.powerCap)), b: watts(d.coolCap) });
   if (state.temp >= TEMP_HOT - 5) status($("temp-status"), "crit", t("temp.crit"));
   else if (state.temp > TEMP_OK) status($("temp-status"), "serious", t("temp.hot"));
@@ -186,9 +231,13 @@ function drawTiles() {
 
   $("uptime-value").textContent = uptime(state.uptime);
   const tier = slaTier(state.uptime);
-  status($("uptime-status"), tier === 0 ? "serious" : "good", t(`sla.${tier}`));
+  const level = tier === 0 ? (state.uptime < 0.95 ? "crit" : "serious") : tier === 1 ? "warn" : "good";
+  $("uptime-value").style.color = COLOR[level];
+  status($("uptime-status"), level, t(`sla.${tier}`));
   $("uptime-streak").textContent = t("uptime.streak", { t: duration(state.stats.streak) });
-  $("ops-label").textContent = t("uptime.ops", { p: percent(d.coverage) });
+  setText($("away"), t("uptime.away", { p: percent(d.awayShare), h: d.awayHours }));
+  $("away-chip").title = t("uptime.away.hint");
+  setText($("ops-label"), t("uptime.ops", { p: percent(d.coverage) }));
   $("ops").title = t("uptime.ops.hint");
   $("ops-bar").style.width = `${Math.round(d.coverage * 100)}%`;
 }
@@ -205,7 +254,9 @@ function drawAlerts() {
     box.textContent = "";
     if (state.outage > 0) {
       const card = el("div", "alert crit");
-      card.append(el("span", "badge", `✕ ${t("alerts.outage")}`), el("h3", null, outcome?.title ?? t("alerts.outage")));
+      const badge = el("span", "badge");
+      badge.append(icon("cross", 14), el("span", null, t("alerts.outage")));
+      card.append(badge, el("h3", null, outcome?.title ?? t("alerts.outage")));
       if (outcome) card.append(el("p", null, [outcome.text, outcome.extra].filter(Boolean).join(" ")));
       card.append(el("p", "count"));
       box.append(card);
@@ -213,8 +264,9 @@ function drawAlerts() {
       const def = incidentDef(inc.id);
       flip = def.kind === "choice" && Math.random() < 0.5;
       const card = el("div", `alert ${def.good ? "chance" : "firing"}`);
-      card.append(el("span", "badge", def.good ? `★ ${t("alerts.chance")}` : `▲ ${t("alerts.firing")}`));
-      card.append(el("h3", null, t(`inc.${inc.id}.title`)), el("p", null, t(`inc.${inc.id}.desc`)));
+      const badge = el("span", "badge");
+      badge.append(icon(def.good ? "star" : "bell", 14), el("span", null, t(def.good ? "alerts.chance" : "alerts.firing")));
+      card.append(badge, el("h3", null, t(`inc.${inc.id}.title`)), el("p", null, t(`inc.${inc.id}.desc`)));
       const bar = el("div", "timer");
       bar.append(el("i"));
       card.append(bar, el("p", "count"));
@@ -232,11 +284,13 @@ function drawAlerts() {
       box.append(card);
     } else if (outcome) {
       const card = el("div", `alert done ${outcome.kind}`);
-      card.append(el("span", "badge", outcome.kind === "good" ? "✓" : "✕"), el("h3", null, outcome.title), el("p", null, [outcome.text, outcome.extra].filter(Boolean).join(" ")));
+      const badge = el("span", "badge");
+      badge.append(icon(outcome.kind === "good" ? "check" : "cross", 14), el("span", null, t(outcome.kind === "good" ? "alerts.resolved" : "alerts.failed")));
+      card.append(badge, el("h3", null, outcome.title), el("p", null, [outcome.text, outcome.extra].filter(Boolean).join(" ")));
       box.append(card);
     } else {
       const p = el("p", "quiet");
-      p.append(el("i", "dot", "✓"), el("span", null, `${t("alerts.none")} ${t("alerts.none2")}`));
+      p.append(icon("check"), el("span", null, `${t("alerts.none")} ${t("alerts.none2")}`));
       box.append(p);
     }
   }
@@ -254,30 +308,24 @@ function drawAlerts() {
   const fx = [];
   if (state.boost) fx.push(t("alerts.boost", { m: num(state.boost.rev), t: duration(Math.ceil(state.boost.left)) }));
   if (state.debuff) fx.push(t("alerts.debuff", { t: duration(Math.ceil(state.debuff.left)) }));
-  const text = fx.join(" · ");
-  if ($("effects").textContent !== text) $("effects").textContent = text;
+  setText($("effects"), fx.join(" · "));
 }
 
-let rackKey = "";
-function drawRack() {
-  const mode = state.outage > 0 ? "down" : d.powerFactor < 1 || d.thermalFactor < 1 ? "slow" : "up";
-  const key = `${getLang()}|${mode}|${TIERS.map((x) => state.hw[x.id]).join(",")}`;
-  if (key === rackKey) return;
-  rackKey = key;
-  const box = $("rack");
-  box.textContent = "";
-  box.className = `scroll ${mode}`;
-  for (const tier of TIERS) {
-    const n = state.hw[tier.id];
-    if (!n) continue;
-    const row = el("div", "machines");
-    const head = el("div", "mhead");
-    head.append(el("span", null, t(`hw.${tier.id}.name`)), el("b", null, `×${num(n)}`));
-    const leds = el("div", "leds");
-    for (let i = 0; i < Math.min(n, 32); i++) leds.append(el("i"));
-    row.append(head, leds);
-    box.append(row);
-  }
+function drawScene() {
+  const inc = state.incident ? incidentDef(state.incident.id) : null;
+  scene.set({
+    stage: d.stage,
+    hw: state.hw,
+    mode: state.outage > 0 ? "down" : d.powerFactor < 1 || d.thermalFactor < 1 ? "slow" : "up",
+    alert: !!inc && !inc.good,
+    chance: !!inc && !!inc.good,
+    boost: !!state.boost,
+    hot: Math.max(0, Math.min(1, (state.temp - TEMP_OK) / (TEMP_HOT - TEMP_OK))),
+  });
+  let total = 0;
+  for (const tier of TIERS) total += state.hw[tier.id];
+  setText($("scene-total"), t("scene.total", { n: num(total) }));
+  setText($("work-hint"), t("work.hint", { v: money(d.clickValue) }));
 }
 
 // ----- The shop -----
@@ -295,12 +343,12 @@ function visible(kind) {
   });
   return { shown, more: shown.length < list.length };
 }
-const visibleUpgrades = () => UPGRADES.filter((u) => !state.up.includes(u.id) && state.runEarned >= u.cost * 0.2);
+const offered = () => UPGRADES.filter((u) => upgradeOffered(state, u));
 
 function effectText(kind, item) {
   if (kind === "hw") {
     // What one of them earns right now, with every bonus you have.
-    const each = item.rev * milestoneMult(state.hw[item.id]) * (d.nominal / (d.baseRev || 1));
+    const each = item.rev * milestoneMult(state.hw[item.id]) * (d.fx.tier[item.id] ?? 1) * (d.nominal / (d.baseRev || 1));
     return t("shop.fx.hw", { rev: t("unit.persec", { v: money(each) }), power: watts(item.power * d.fx.draw) });
   }
   if (kind === "pw") return t("shop.fx.pw", { cap: watts(item.cap) });
@@ -315,30 +363,29 @@ function buildShop() {
   for (const b of $("tabs").children) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
   for (const b of $("amount").querySelectorAll("button")) b.setAttribute("aria-pressed", String(String(state.buyMode ?? 1) === b.dataset.n));
   $("amount").hidden = tab === "up";
-  const note = $("shop-note");
-  note.hidden = tab !== "st";
+  $("shop-note").hidden = tab !== "st";
 
   if (tab === "up") {
-    const open = visibleUpgrades();
+    const open = offered();
     if (!open.length) box.append(el("p", "quiet", t("shop.up.none")));
     for (const u of open) {
       const b = el("button", "item");
       b.type = "button";
       b.dataset.up = u.id;
       const main = el("div", "main");
-      main.append(el("strong", null, t(`up.${u.id}.name`)), el("span", "desc", t(`up.${u.id}.desc`)), el("span", "fx", t(`up.${u.id}.fx`)));
-      const cost = el("span", "cost", price(u.cost));
+      main.append(el("strong", null, upgradeText(u, "name")), el("span", "desc", upgradeText(u, "desc")), el("span", "fx", upgradeText(u, "fx")));
+      const cost = el("span", "cost", price(upgradeCost(state, u)));
       b.append(main, cost);
       box.append(b);
       rows.push({ b, up: u, cost });
     }
     const have = UPGRADES.filter((u) => state.up.includes(u.id));
     if (have.length) {
-      box.append(el("h3", "installed", t("shop.installed")));
+      box.append(el("h3", "installed", `${t("shop.installed")} (${have.length})`));
       for (const u of have) {
         const row = el("div", "item owned");
         const main = el("div", "main");
-        main.append(el("strong", null, t(`up.${u.id}.name`)), el("span", "fx", t(`up.${u.id}.fx`)));
+        main.append(el("strong", null, upgradeText(u, "name")), el("span", "fx", upgradeText(u, "fx")));
         row.append(main, el("span", "cost", "✓"));
         box.append(row);
       }
@@ -373,26 +420,29 @@ function buildShop() {
 }
 
 function drawShop() {
-  const ids = tab === "up" ? `${visibleUpgrades().map((u) => u.id)}|${state.up.length}` : visible(tab).shown.map((x) => x.id).join();
+  const ids = tab === "up" ? `${offered().map((u) => u.id)}|${state.up.length}` : visible(tab).shown.map((x) => x.id).join();
   const key = `${getLang()}|${tab}|${state.buyMode}|${ids}`;
   if (key !== shopKey) {
     shopKey = key;
     buildShop();
   }
-  if (tab === "st") $("shop-note").textContent = `${t("uptime.ops", { p: percent(d.coverage) })} · ${t("shop.need.ops", { n: num(Math.ceil(d.opsNeeded)) })} · ${t("uptime.ops.hint")}`;
+  // A dot on the Upgrades tab when one can be bought.
+  $("tabs").querySelector('[data-tab="up"]').classList.toggle("has", tab !== "up" && offered().some((u) => state.money >= upgradeCost(state, u)));
+  if (tab === "st") setText($("shop-note"), `${t("uptime.ops", { p: percent(d.coverage) })} · ${t("shop.need.ops", { n: num(Math.ceil(d.opsNeeded)) })} · ${t("uptime.ops.hint")} ${t("stats.away")}: ${t("stats.away.value", { p: percent(d.awayShare), h: d.awayHours })}.`);
   const mode = state.buyMode ?? 1;
+  const mult = priceMult(state, tab);
   for (const r of rows) {
     if (r.up) {
-      r.b.disabled = state.money < r.up.cost;
+      r.b.disabled = state.money < upgradeCost(state, r.up);
       continue;
     }
     const owned = state[tab][r.item.id];
-    const can = maxAffordable(tab, r.item.id, owned, state.money);
+    const can = maxAffordable(tab, r.item.id, owned, state.money, mult);
     const n = mode === "max" ? Math.max(1, can) : mode;
-    const cost = costFor(tab, r.item.id, owned, n);
+    const cost = costFor(tab, r.item.id, owned, n, mult);
     r.b.disabled = can < n;
-    r.count.textContent = owned ? `×${num(owned)}` : "";
-    r.cost.textContent = n > 1 ? `×${n} · ${price(cost)}` : price(cost);
+    setText(r.count, owned ? `×${num(owned)}` : "");
+    setText(r.cost, n > 1 ? `×${n} · ${price(cost)}` : price(cost));
     r.b.setAttribute("aria-label", `${t("shop.buy", { name: t(`${tab}.${r.item.id}.name`), cost: r.cost.textContent })}. ${t("shop.owned", { n: owned })}`);
     let fx = effectText(tab, r.item);
     let warn = "";
@@ -403,8 +453,8 @@ function drawShop() {
       if (draw > d.powerCap) warn = t("shop.warn.power");
       else if (draw > d.coolCap) warn = t("shop.warn.cool");
     }
-    if (r.fx.textContent !== fx) r.fx.textContent = fx;
-    if (r.warn.textContent !== (warn ? `! ${warn}` : "")) r.warn.textContent = warn ? `! ${warn}` : "";
+    setText(r.fx, fx);
+    setText(r.warn, warn);
   }
 }
 
@@ -413,11 +463,60 @@ function drawShop() {
 function openExit() {
   const gain = exitShares(state);
   const ok = canExit(state);
-  let text = ok ? t("exit.gain", { n: num(gain), p: num(gain * SHARE_BONUS * 100) }) : t("exit.locked", { v: money(exitNeeds(state)) });
+  const each = shareBonus(state) * 100;
+  let text = ok ? t("exit.gain", { n: num(gain), p: num(gain * each) }) : t("exit.locked", { v: money(exitNeeds(state)) });
   if (state.shares) text += ` ${t("exit.have", { n: num(state.shares) })}`;
+  $("exit-keep").textContent = t("exit.keep", { p: num(each) });
   $("exit-gain").textContent = text;
   $("btn-exit-go").disabled = !ok;
   $("dlg-exit").showModal();
+}
+
+/** What a level of a reincarnation upgrade gives, as text. */
+function perkValue(p, level) {
+  if (p.id === "seed") return money(p.values[level - 1]);
+  if (p.id === "starter") return t(`perk.starter.v${level}`);
+  if (p.id === "autoclick") return num(p.values[level - 1]);
+  if (p.id === "luck") return `${level + 1}×`;
+  if (p.id === "dividends") return `${num(2 + level)}%`;
+  return p.per ? percent(p.per * level) : "";
+}
+
+function drawPerks() {
+  const free = freeShares(state);
+  $("reborn-intro").textContent = t(state.reborn ? "reborn.intro" : "reborn.intro.view");
+  $("reborn-balance").textContent = t("reborn.balance", { n: num(free) });
+  $("reborn-bonus").textContent = t("reborn.bonus", { n: num(state.shares), p: num(state.shares * shareBonus(state) * 100) });
+  $("btn-reborn-go").textContent = t(state.reborn ? "reborn.start" : "close");
+  const ul = $("perks");
+  ul.textContent = "";
+  for (const p of PERKS) {
+    const level = state.perks[p.id] ?? 0;
+    const cost = perkCost(state, p.id);
+    const open = perkOpen(state, p.id);
+    const li = el("li");
+    const b = el("button", `item perk${level ? " some" : ""}`);
+    b.type = "button";
+    b.dataset.perk = p.id;
+    b.disabled = cost == null || !open || free < cost;
+    const main = el("div", "main");
+    const head = el("div", "head");
+    head.append(el("strong", null, t(`perk.${p.id}.name`)), el("b", "count", cost == null ? t("reborn.max") : t("reborn.level", { a: level, b: p.costs.length })));
+    // Show what the next level gives; once complete, what you have.
+    const fx = t(`perk.${p.id}.fx`, { v: perkValue(p, Math.min(level + 1, p.costs.length)) });
+    main.append(head, el("span", "desc", t(`perk.${p.id}.desc`)), el("span", "fx", fx));
+    if (!open) main.append(el("span", "warn", t("reborn.needs", { name: t(`perk.${p.needs.id}.name`) })));
+    b.append(main, el("span", "cost", cost == null ? "✓" : t("reborn.cost", { n: num(cost) })));
+    li.append(b);
+    ul.append(li);
+  }
+}
+
+function openPerks() {
+  drawPerks();
+  if (!$("dlg-reborn").open) $("dlg-reborn").showModal();
+  $("h-reborn").focus();
+  $("dlg-reborn").scrollTop = 0;
 }
 
 function openStats() {
@@ -427,7 +526,7 @@ function openStats() {
     ["stats.score", num(score(state)), t("stats.score.hint")],
     ["stats.total", money(state.totalEarned)],
     ["stats.run", money(state.runEarned)],
-    ["stats.shares", `${num(state.shares)} (+${num(state.shares * SHARE_BONUS * 100)}%)`],
+    ["stats.shares", `${num(state.shares)} (+${num(state.shares * shareBonus(state) * 100)}%)`],
     ["stats.exits", num(s.exits)],
     ["stats.clicks", num(s.clicks)],
     ["stats.resolved", num(s.resolved)],
@@ -436,6 +535,7 @@ function openStats() {
     ["stats.best", duration(s.bestStreak)],
     ["stats.speedrun", s.speedrun ? duration(s.speedrun / 1000) : none],
     ["stats.played", duration(s.played)],
+    ["stats.away", t("stats.away.value", { p: percent(d.awayShare), h: d.awayHours }), t("uptime.away.hint")],
   ];
   const dl = $("stats");
   dl.textContent = "";
@@ -467,9 +567,10 @@ function openStats() {
 function welcomeBack(out) {
   if (!out.long || out.earned <= 0) return;
   $("offline-body").textContent = t("offline.body", { t: duration(out.seconds), v: money(out.earned) });
-  $("offline-eff").textContent = t(out.efficiency > 0.26 ? "offline.eff.some" : "offline.eff.none", { p: percent(out.efficiency) });
+  $("offline-eff").textContent = t(out.staffed ? "offline.eff.some" : "offline.eff.none", { p: percent(out.efficiency) });
   $("offline-capped").hidden = !out.capped;
-  if (!$("dlg-offline").open) $("dlg-offline").showModal();
+  $("offline-capped").textContent = t("offline.capped", { h: out.hours });
+  if (!$("dlg-offline").open && !$("dlg-reborn").open) $("dlg-offline").showModal();
 }
 
 // ----- Charts -----
@@ -478,20 +579,16 @@ const ago = (n) => (n === 0 ? t("chart.now") : t("chart.ago", { t: duration(n) }
 const charts = {};
 function makeCharts() {
   const tipOf = (id) => $(id).parentElement.querySelector(".tip");
-  charts.rev = createChart($("c-rev"), tipOf("c-rev"), { color: "#3987e5", samples: 300, ago, format: (v) => t("unit.persec", { v: money(v) }) });
-  charts.power = createChart($("c-power"), tipOf("c-power"), {
-    color: "#199e70", samples: 300, ago, format: percent, max: (top) => Math.max(1.25, top * 1.1),
-    limit: { value: 1, color: "#d03b3b", label: () => `100% · ${t("chart.limit")}` },
-  });
-  charts.temp = createChart($("c-temp"), tipOf("c-temp"), {
-    color: "#9085e9", samples: 300, ago, format: degrees, min: 15, max: (top) => Math.max(45, top + 5),
-    limit: { value: TEMP_OK, color: "#ec835a", label: () => `${TEMP_OK} °C · ${t("chart.throttle")}` },
-  });
+  charts.rev = createChart($("c-rev"), tipOf("c-rev"), { color: () => revColor, samples: 300, ago, format: (v) => t("unit.persec", { v: money(v) }) });
+  // Power: up to 125% of what the supply can take. Temperature: 15 to 60 °C.
+  gauges.power = createGauge($("g-power"), [{ to: 0.85 / 1.25, color: COLOR.good }, { to: 1 / 1.25, color: COLOR.serious }, { to: 1, color: COLOR.crit }]);
+  gauges.temp = createGauge($("g-temp"), [
+    { to: (TEMP_OK - 4 - 15) / 45, color: COLOR.good }, { to: (TEMP_OK - 15) / 45, color: COLOR.warn },
+    { to: (TEMP_HOT - 5 - 15) / 45, color: COLOR.serious }, { to: 1, color: COLOR.crit },
+  ]);
 }
 function sample() {
   charts.rev.push(d.rate);
-  charts.power.push(d.load);
-  charts.temp.push(state.temp);
 }
 
 // ----- The loop -----
@@ -501,15 +598,18 @@ function draw() {
   drawTop();
   drawTiles();
   drawAlerts();
-  drawRack();
+  drawScene();
   drawShop();
-  $("work-hint").textContent = t("work.hint", { v: money(d.clickValue) });
 }
 
 let sampled = 0;
 let nextFlavor = 20;
 function frame() {
-  if (paused) return;
+  // Between two lives nothing runs: the reincarnation screen is open.
+  if (paused || state.reborn) {
+    last = performance.now();
+    return;
+  }
   const now = performance.now();
   let dt = (now - last) / 1000;
   last = now;
@@ -518,7 +618,7 @@ function frame() {
   // A browser that slept for a while (without telling us): treat it like time away.
   if (dt > 30) {
     state.lastSeen = Date.now() - dt * 1000;
-    welcomeBack(applyOffline(state));
+    welcomeBack(applyOffline(state, Date.now(), events));
   } else {
     while (dt > 0) {
       const step = Math.min(dt, 1);
@@ -541,20 +641,36 @@ function frame() {
 
 function act(option) {
   if (!state.incident) return;
-  handle(incidentAction(state, option, Math.random, []));
+  const events = incidentAction(state, option, Math.random, []);
+  if (!events.length) play("step");
+  handle(events);
   draw();
+}
+
+/** A new, empty picture of the game after a reset or a new life. */
+function fresh() {
+  for (const c of Object.values(charts)) c.clear();
+  outcome = null;
+  lastStage = null;
+  shopKey = "";
+  alertKey = "";
 }
 
 function wire() {
   $("btn-work").addEventListener("click", (e) => {
     const v = click(state);
-    const pop = el("span", "pop", `+${money(v)}`);
-    const r = e.currentTarget.getBoundingClientRect();
+    play("click");
+    const b = e.currentTarget;
+    const r = b.getBoundingClientRect();
     // A keyboard "click" has no position: show it in the middle.
-    pop.style.left = `${e.clientX ? e.clientX - r.left : r.width / 2}px`;
-    pop.style.top = `${e.clientY ? e.clientY - r.top : r.height / 2}px`;
-    e.currentTarget.append(pop);
+    const x = e.clientX ? e.clientX - r.left : r.width / 2;
+    const y = e.clientY ? e.clientY - r.top : r.height / 2;
+    const pop = el("span", "pop", `+${money(v)}`);
+    pop.style.left = `${x}px`;
+    pop.style.top = `${y}px`;
+    b.append(pop);
     setTimeout(() => pop.remove(), 700);
+    scene.poke(x / r.width, y / r.height);
     drawTop();
   });
 
@@ -585,20 +701,27 @@ function wire() {
     const b = e.target.closest("button.item");
     if (!b || b.disabled) return;
     if (b.dataset.up) {
-      if (buyUpgrade(state, b.dataset.up)) {
-        log("info", t("log.upgrade", { name: t(`up.${b.dataset.up}.name`) }));
+      const u = UPGRADES.find((x) => x.id === b.dataset.up);
+      if (buyUpgrade(state, u.id)) {
+        play("upgrade");
+        log("info", t("log.upgrade", { name: upgradeText(u, "name") }));
         save();
       }
     } else if (buy(state, tab, b.dataset.id, state.buyMode ?? 1)) {
+      play("buy");
       save();
     }
     draw();
     // The list was rebuilt when something new appeared: keep the keyboard on the same thing.
-    if (!b.isConnected) $("shop").querySelector(`[data-id="${b.dataset.id}"]`)?.focus();
+    if (!b.isConnected && b.dataset.id) $("shop").querySelector(`[data-id="${b.dataset.id}"]`)?.focus();
   });
 
   $("btn-exit").addEventListener("click", openExit);
   $("btn-stats").addEventListener("click", openStats);
+  $("btn-perks").addEventListener("click", () => {
+    $("dlg-exit").close();
+    openPerks();
+  });
   $("btn-lang").addEventListener("click", () => {
     state.lang = getLang() === "de" ? "en" : "de";
     setLang(state.lang);
@@ -606,19 +729,51 @@ function wire() {
     draw();
     save();
   });
+  $("btn-sound").addEventListener("click", () => {
+    state.muted = !isMuted();
+    setMuted(state.muted);
+    drawSound();
+    play("buy");
+    save();
+  });
   $("btn-exit-go").addEventListener("click", () => {
     const next = exit(state);
     if (!next) return;
     report(true);
     state = next;
-    for (const c of Object.values(charts)) c.clear();
-    outcome = null;
-    lastStage = null;
+    fresh();
     $("dlg-exit").close();
+    play("reborn");
     log("ok", t("log.exit", { n: num(state.shares) }));
     save();
     draw();
+    openPerks();
   });
+  $("perks").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-perk]");
+    if (!b || b.disabled) return;
+    if (buyPerk(state, b.dataset.perk)) {
+      play("upgrade");
+      log("info", t("log.perk", { name: t(`perk.${b.dataset.perk}.name`) }));
+      save();
+      drawPerks();
+      $("perks").querySelector(`[data-perk="${b.dataset.perk}"]`)?.focus();
+      draw();
+    }
+  });
+  $("btn-reborn-go").addEventListener("click", () => {
+    if (state.reborn) {
+      beginRun(state);
+      fresh();
+      log("ok", t("log.reborn"));
+      save();
+      last = performance.now();
+      draw();
+    }
+    $("dlg-reborn").close();
+  });
+  // Between two lives the screen stays until the new life is started.
+  $("dlg-reborn").addEventListener("cancel", (e) => state.reborn && e.preventDefault());
   $("btn-reset").addEventListener("click", (e) => {
     const b = e.currentTarget;
     if (!b.dataset.sure) {
@@ -626,13 +781,11 @@ function wire() {
       b.textContent = t("settings.reset.sure");
       return;
     }
-    const lang = getLang();
+    const keep = { lang: getLang(), muted: isMuted() || undefined };
     state = newState();
-    state.lang = lang;
-    for (const c of Object.values(charts)) c.clear();
+    Object.assign(state, keep);
+    fresh();
     $("log").textContent = "";
-    outcome = null;
-    lastStage = null;
     save();
     $("dlg-stats").close();
     log("info", t("log.boot"));
@@ -640,7 +793,9 @@ function wire() {
   });
   for (const b of document.querySelectorAll("[data-close]")) b.addEventListener("click", () => b.closest("dialog").close());
   // A click on the dark area around a dialog closes it.
-  for (const dlg of document.querySelectorAll("dialog")) dlg.addEventListener("click", (e) => e.target === dlg && dlg.close());
+  for (const dlg of document.querySelectorAll("dialog")) {
+    dlg.addEventListener("click", (e) => e.target === dlg && !(dlg.id === "dlg-reborn" && state.reborn) && dlg.close());
+  }
 
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector("dialog[open]")) return;
@@ -661,13 +816,17 @@ function wire() {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       paused = true;
+      scene.stop();
       state.lastSeen = Date.now();
       report(true);
       save();
     } else if (paused) {
       paused = false;
+      scene.start();
       last = performance.now();
-      welcomeBack(applyOffline(state));
+      const events = [];
+      if (!state.reborn) welcomeBack(applyOffline(state, Date.now(), events));
+      handle(events);
       draw();
     }
   });
@@ -680,15 +839,21 @@ function wire() {
 function start() {
   const had = load();
   setLang(state.lang ?? browserLang());
+  setMuted(state.muted);
+  scene = createScene($("c-scene"));
   texts();
   makeCharts();
   wire();
-  const out = had ? applyOffline(state) : null;
+  const events = [];
+  const out = had && !state.reborn ? applyOffline(state, Date.now(), events) : null;
   d = derive(state);
   lastStage = d.stage;
   log("info", t(had ? "log.back" : "log.boot"));
+  handle(events);
   draw();
-  if (out) welcomeBack(out);
+  scene.start();
+  if (state.reborn) openPerks();
+  else if (out) welcomeBack(out);
   // Achievements earned before Toki was listening (or outside Toki) count there too.
   setTimeout(() => state.ach.forEach(achieved), 2000);
   last = performance.now();
