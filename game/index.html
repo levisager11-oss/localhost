@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#181b1f">
+  <meta name="description" content="An idle game: from a Raspberry Pi in your bedroom to a hyperscale datacenter.">
+  <title>localhost</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <header class="toolbar">
+    <nav class="crumbs" aria-label="localhost">
+      <svg class="logo" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        <rect x="3" y="14" width="18" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        <circle cx="7" cy="7" r="1.2" fill="#73bf69"/><circle cx="7" cy="17" r="1.2" fill="#73bf69"/>
+        <path d="M12 7h6M12 17h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <span class="crumb">Home</span><span class="sep" aria-hidden="true">›</span>
+      <span class="crumb" data-t="crumbs"></span><span class="sep" aria-hidden="true">›</span>
+      <span class="crumb">localhost</span><span class="sep" aria-hidden="true">›</span>
+      <strong id="stage"></strong>
+    </nav>
+    <div class="balance">
+      <span class="label" data-t="top.balance"></span>
+      <output id="money"></output>
+      <span id="rate" class="rate"></span>
+    </div>
+    <div class="tools">
+      <span class="chip" id="away-chip"><span class="ico" data-icon="moon"></span><span id="away"></span></span>
+      <button id="btn-exit" class="btn" type="button" data-t="top.exit"></button>
+      <button id="btn-stats" class="btn" type="button" data-t="top.stats"></button>
+      <button id="btn-lang" class="btn" type="button" data-t="top.lang"></button>
+      <button id="btn-sound" class="btn square" type="button"></button>
+    </div>
+  </header>
+
+  <main class="board">
+    <div class="left">
+      <section class="panel stat" id="p-rev" aria-labelledby="h-rev">
+        <h2 id="h-rev" data-t="panel.revenue"></h2>
+        <p class="big" id="rev-value"></p>
+        <p class="sub" id="rev-sub"></p>
+        <div class="spark"><canvas id="c-rev" role="img"></canvas><div class="tip" hidden></div></div>
+      </section>
+      <section class="panel stat" id="p-power" aria-labelledby="h-power">
+        <h2 id="h-power" data-t="panel.power"></h2>
+        <div class="gauge" id="g-power"></div>
+        <p class="sub status" id="power-status"></p>
+        <p class="sub" id="power-sub"></p>
+      </section>
+      <section class="panel stat" id="p-temp" aria-labelledby="h-temp">
+        <h2 id="h-temp" data-t="panel.temp"></h2>
+        <div class="gauge" id="g-temp"></div>
+        <p class="sub status" id="temp-status"></p>
+        <p class="sub" id="temp-sub"></p>
+      </section>
+      <section class="panel stat" id="p-uptime" aria-labelledby="h-uptime">
+        <h2 id="h-uptime" data-t="panel.uptime"></h2>
+        <p class="big" id="uptime-value"></p>
+        <p class="sub status" id="uptime-status"></p>
+        <p class="sub" id="uptime-streak"></p>
+        <div class="ops" id="ops">
+          <p class="sub" id="ops-label"></p>
+          <div class="meter" aria-hidden="true"><i id="ops-bar"></i></div>
+        </div>
+      </section>
+
+      <section class="panel" id="p-scene" aria-labelledby="h-rack">
+        <h2 id="h-rack"><span data-t="panel.rack"></span> <small id="scene-total"></small></h2>
+        <button id="btn-work" class="stage" type="button">
+          <span class="view"><canvas id="c-scene" aria-hidden="true"></canvas></span>
+          <span class="work-label"><b data-t="work.btn"></b><small id="work-hint"></small></span>
+        </button>
+        <p class="keys" data-t="work.keys"></p>
+      </section>
+      <section class="panel" id="p-alerts" aria-labelledby="h-alerts">
+        <h2 id="h-alerts" data-t="panel.alerts"></h2>
+        <div id="alerts" aria-live="assertive"></div>
+        <div id="effects"></div>
+      </section>
+      <section class="panel" id="p-log" aria-labelledby="h-log">
+        <h2 id="h-log" data-t="panel.log"></h2>
+        <ol id="log" class="scroll" aria-live="off"></ol>
+      </section>
+    </div>
+
+    <section class="panel" id="p-shop" aria-labelledby="h-shop">
+      <h2 id="h-shop" data-t="panel.shop"></h2>
+      <div class="tabs" role="tablist" id="tabs">
+        <button type="button" role="tab" data-tab="hw" data-t="shop.hw"></button>
+        <button type="button" role="tab" data-tab="pw" data-t="shop.pw"></button>
+        <button type="button" role="tab" data-tab="cl" data-t="shop.cl"></button>
+        <button type="button" role="tab" data-tab="st" data-t="shop.st"></button>
+        <button type="button" role="tab" data-tab="up" data-t="shop.up"></button>
+      </div>
+      <div class="amount" id="amount" role="group">
+        <span data-t="shop.amount"></span>
+        <div class="radio">
+          <button type="button" data-n="1">×1</button>
+          <button type="button" data-n="10">×10</button>
+          <button type="button" data-n="max" data-t="shop.max"></button>
+        </div>
+      </div>
+      <p class="sub" id="shop-note" hidden></p>
+      <div id="shop" class="scroll" role="tabpanel"></div>
+    </section>
+  </main>
+
+  <dialog id="dlg-exit" aria-labelledby="h-exit">
+    <h2 id="h-exit" data-t="exit.title"></h2>
+    <p data-t="exit.body"></p>
+    <p id="exit-keep"></p>
+    <p id="exit-gain" class="strong"></p>
+    <div class="actions">
+      <button type="button" class="btn" id="btn-perks" data-t="reborn.open"></button>
+      <button type="button" class="btn" data-close data-t="exit.cancel"></button>
+      <button type="button" class="btn primary" id="btn-exit-go" data-t="exit.confirm"></button>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-reborn" aria-labelledby="h-reborn">
+    <h2 id="h-reborn" tabindex="-1" data-t="reborn.title"></h2>
+    <p id="reborn-intro"></p>
+    <p id="reborn-balance" class="strong"></p>
+    <p id="reborn-bonus"></p>
+    <ul id="perks"></ul>
+    <div class="actions">
+      <button type="button" class="btn primary" id="btn-reborn-go"></button>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-stats" aria-labelledby="h-stats">
+    <h2 id="h-stats" tabindex="-1" data-t="stats.title"></h2>
+    <dl id="stats"></dl>
+    <h3><span data-t="ach.title"></span> <small id="ach-count"></small></h3>
+    <ul id="achievements"></ul>
+    <h3 data-t="settings.title"></h3>
+    <div class="actions start">
+      <button type="button" class="btn danger" id="btn-reset" data-t="settings.reset"></button>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn primary" data-close data-t="close"></button>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-offline" aria-labelledby="h-offline">
+    <h2 id="h-offline" data-t="offline.title"></h2>
+    <p id="offline-body"></p>
+    <p id="offline-eff"></p>
+    <p id="offline-capped" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn primary" data-close data-t="ok"></button>
+    </div>
+  </dialog>
+
+  <div id="toasts" aria-live="polite"></div>
+</body>
+</html>
