@@ -279,7 +279,9 @@ export function perkOpen(s, id) {
   return !needs || (s.perks[needs.id] ?? 0) >= needs.level;
 }
 
+/** Only between two lives: right after selling the company, before the new life starts. */
 export function buyPerk(s, id) {
+  if (!s.reborn) return false;
   const cost = perkCost(s, id);
   if (cost == null || freeShares(s) < cost || !perkOpen(s, id)) return false;
   s.perks[id] = (s.perks[id] ?? 0) + 1;

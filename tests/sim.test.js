@@ -251,6 +251,8 @@ test("reincarnation upgrades cost stock options and shape the next life", () => 
   assert.equal(s.money, 0);
   beginRun(s, 20);
   assert.equal(s.reborn, false);
+  assert.equal(buyPerk(s, "runbooks"), false, "only between two lives");
+  assert.equal(freeShares(s), 7);
   assert.equal(s.money, 1e6);
   assert.equal(s.hw.pi, 10);
   assert.equal(s.pw.strip, 1);

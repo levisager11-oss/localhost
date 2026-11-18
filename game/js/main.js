@@ -498,7 +498,7 @@ function drawPerks() {
     const b = el("button", `item perk${level ? " some" : ""}`);
     b.type = "button";
     b.dataset.perk = p.id;
-    b.disabled = cost == null || !open || free < cost;
+    b.disabled = !state.reborn || cost == null || !open || free < cost;
     const main = el("div", "main");
     const head = el("div", "head");
     head.append(el("strong", null, t(`perk.${p.id}.name`)), el("b", "count", cost == null ? t("reborn.max") : t("reborn.level", { a: level, b: p.costs.length })));

@@ -28,8 +28,8 @@ It looks like a monitoring dashboard (think Grafana), has sound, and is in Engli
   and with upgrades (on-call phone, self-healing scripts…), for 8 hours, or 24 and 72 with
   upgrades. The toolbar always shows the current numbers.
 - **Reincarnation**: sell the company and you are reborn in the bedroom with stock options.
-  Each one adds 2% income, forever, and you spend them on twelve upgrades that last through
-  every life: seed money, your old hardware, a macro keyboard that clicks for you, a bot that
+  Each one adds 2% income, forever. Right after the sale, and only then, you spend them on
+  twelve upgrades that last through every life: seed money, your old hardware, a macro keyboard that clicks for you, a bot that
   buys power and cooling, cheaper hardware, and more.
 
 The picture of your machines is the big button: click it to handle a request by hand. It shows
