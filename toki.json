@@ -1,0 +1,208 @@
+{
+  "title": "localhost",
+  "slug": "localhost",
+  "description": "You start with a Raspberry Pi in your bedroom and end with a hyperscale datacenter. Buy machines, keep power and cooling in balance, and watch your uptime. Now and then an alert fires: a DDoS attack, a full disk, a deploy on Friday afternoon. Click it away in time, or everything goes down. An idle game with jokes for everyone who has ever restarted a server.",
+  "description_de": "Du fängst mit einem Raspberry Pi im Kinderzimmer an und hörst mit einem Hyperscale-Rechenzentrum auf. Kauf Maschinen, halte Strom und Kühlung im Gleichgewicht und behalte deine Uptime im Auge. Ab und zu geht ein Alarm los: ein DDoS-Angriff, eine volle Festplatte, ein Deployment am Freitagnachmittag. Klick ihn rechtzeitig weg, sonst fällt alles aus. Ein Idle-Spiel mit Witzen für alle, die schon einmal einen Server neu gestartet haben.",
+  "controls": "Mouse or touch: click buttons to handle requests, buy things and answer alerts. Keyboard: Space handles a request, 1 and 2 answer an alert.",
+  "controls_de": "Maus oder Touch: Klick auf die Knöpfe, um Anfragen zu bearbeiten, einzukaufen und Alarme zu beantworten. Tastatur: Die Leertaste bearbeitet eine Anfrage, 1 und 2 beantworten einen Alarm.",
+  "category": "strategy",
+  "engine": "HTML/JS",
+  "version": "1.0",
+  "update_title": "First release",
+  "notes": [
+    "The game is here: from a Raspberry Pi in the bedroom to a hyperscale datacenter",
+    "Three high-score lists and 20 achievements",
+    "English and German"
+  ],
+  "folder": "game",
+  "cover_image": "cover.png",
+  "screenshots": [
+    "shots/1.png",
+    "shots/2.png"
+  ],
+  "score_order": "high",
+  "score_format": "points",
+  "achievements": [
+    {
+      "id": "hello-world",
+      "name": "Hello, World",
+      "name_de": "Hello, World",
+      "description": "Buy your second machine.",
+      "description_de": "Kauf deine zweite Maschine.",
+      "icon": "👋"
+    },
+    {
+      "id": "moved-out",
+      "name": "Jet engine",
+      "name_de": "Düsentriebwerk",
+      "description": "Own a used rack server. The neighbours can hear it too.",
+      "description_de": "Besitze einen gebrauchten Rack-Server. Die Nachbarn hören ihn auch.",
+      "icon": "✈️"
+    },
+    {
+      "id": "rack-em-up",
+      "name": "Rack 'em up",
+      "name_de": "Voll bestückt",
+      "description": "Own a full 42U rack.",
+      "description_de": "Besitze ein volles 42U-Rack.",
+      "icon": "🗄️"
+    },
+    {
+      "id": "colo",
+      "name": "Caged",
+      "name_de": "Hinter Gittern",
+      "description": "Rent a cage in a colocation datacenter.",
+      "description_de": "Miete einen Käfig in einem Colocation-Rechenzentrum.",
+      "icon": "🔒"
+    },
+    {
+      "id": "datacenter",
+      "name": "My house, my rules",
+      "name_de": "Mein Haus, meine Regeln",
+      "description": "Build your own datacenter hall.",
+      "description_de": "Bau deine eigene Rechenzentrumshalle.",
+      "icon": "🏢"
+    },
+    {
+      "id": "hyperscaler",
+      "name": "Hyperscaler",
+      "name_de": "Hyperscaler",
+      "description": "Open a hyperscale region. You are the cloud now.",
+      "description_de": "Eröffne eine Hyperscale-Region. Du bist jetzt die Cloud.",
+      "icon": "☁️"
+    },
+    {
+      "id": "three-nines",
+      "name": "Three nines",
+      "name_de": "Drei Neunen",
+      "description": "Reach 99.9% uptime.",
+      "description_de": "Erreiche 99,9% Uptime.",
+      "icon": "📈"
+    },
+    {
+      "id": "five-nines",
+      "name": "Five nines",
+      "name_de": "Fünf Neunen",
+      "description": "Reach 99.999% uptime. That's five minutes of downtime a year.",
+      "description_de": "Erreiche 99,999% Uptime. Das sind fünf Minuten Ausfall pro Jahr.",
+      "icon": "🏆"
+    },
+    {
+      "id": "space-heater",
+      "name": "Space heater",
+      "name_de": "Heizlüfter",
+      "description": "Let the temperature climb to 50 °C.",
+      "description_de": "Lass die Temperatur auf 50 °C steigen.",
+      "icon": "🔥"
+    },
+    {
+      "id": "breaker",
+      "name": "Tripped the breaker",
+      "name_de": "Sicherung raus",
+      "description": "Plug in more than your power can take.",
+      "description_de": "Häng mehr an den Strom, als er hergibt.",
+      "icon": "⚡"
+    },
+    {
+      "id": "it-was-dns",
+      "name": "It was DNS",
+      "name_de": "Es war DNS",
+      "description": "Find the cause of the outage. It's always DNS.",
+      "description_de": "Finde die Ursache des Ausfalls. Es ist immer DNS.",
+      "icon": "🔍"
+    },
+    {
+      "id": "ddos",
+      "name": "Not today",
+      "name_de": "Heute nicht",
+      "description": "Fend off a DDoS attack.",
+      "description_de": "Wehre einen DDoS-Angriff ab.",
+      "icon": "🛡️"
+    },
+    {
+      "id": "yolo",
+      "name": "Works in prod",
+      "name_de": "Läuft in Prod",
+      "description": "Fix it live in production on a Friday afternoon and get away with it.",
+      "description_de": "Reparier an einem Freitagnachmittag live in der Produktion und komm damit durch.",
+      "icon": "🎲"
+    },
+    {
+      "id": "firefighter",
+      "name": "Firefighter",
+      "name_de": "Feuerwehr",
+      "description": "Resolve 50 alerts yourself.",
+      "description_de": "Löse 50 Alarme selbst.",
+      "icon": "🧯"
+    },
+    {
+      "id": "on-call-hero",
+      "name": "On-call hero",
+      "name_de": "Held der Rufbereitschaft",
+      "description": "Resolve 250 alerts yourself.",
+      "description_de": "Löse 250 Alarme selbst.",
+      "icon": "📟"
+    },
+    {
+      "id": "ipv6",
+      "name": "Early adopter",
+      "name_de": "Früh dran",
+      "description": "Roll out IPv6. Its big decade is surely coming.",
+      "description_de": "Führe IPv6 ein. Sein grosses Jahrzehnt kommt bestimmt.",
+      "icon": "🐢"
+    },
+    {
+      "id": "sleep",
+      "name": "Sleep through the night",
+      "name_de": "Durchschlafen",
+      "description": "Have enough staff on call to cover every alert.",
+      "description_de": "Hab genug Leute in Rufbereitschaft, um jeden Alarm abzudecken.",
+      "icon": "😴"
+    },
+    {
+      "id": "millionaire",
+      "name": "First million",
+      "name_de": "Erste Million",
+      "description": "Earn $1 million in total.",
+      "description_de": "Verdiene insgesamt 1 Million $.",
+      "icon": "💰"
+    },
+    {
+      "id": "unicorn",
+      "name": "Unicorn",
+      "name_de": "Einhorn",
+      "description": "Earn $1 billion in total.",
+      "description_de": "Verdiene insgesamt 1 Milliarde $.",
+      "icon": "🦄"
+    },
+    {
+      "id": "exit",
+      "name": "Bought out",
+      "name_de": "Aufgekauft",
+      "description": "Sell your company and start over.",
+      "description_de": "Verkaufe deine Firma und fang neu an.",
+      "icon": "🤝"
+    }
+  ],
+  "boards": [
+    {
+      "id": "",
+      "name": "Score",
+      "name_de": "Punkte"
+    },
+    {
+      "id": "streak",
+      "name": "Longest time without an outage",
+      "name_de": "Längste Zeit ohne Ausfall",
+      "score_order": "high",
+      "score_format": "time"
+    },
+    {
+      "id": "speedrun",
+      "name": "Fastest to a hyperscale region",
+      "name_de": "Am schnellsten zur Hyperscale-Region",
+      "score_order": "low",
+      "score_format": "time"
+    }
+  ]
+}
