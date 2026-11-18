@@ -1,19 +1,20 @@
 {
   "title": "localhost",
   "slug": "localhost",
-  "description": "You start with a Raspberry Pi in your bedroom and end with a hyperscale datacenter (and then it goes on: under the sea, into orbit, to the Moon). Buy machines, keep power and cooling in balance, and watch your uptime. Now and then an alert fires: a DDoS attack, a full disk, a deploy on Friday afternoon. Click it away in time, or everything goes down. Sell the company, be reborn, and keep upgrades for your next life. An idle game with jokes for everyone who has ever restarted a server.",
-  "description_de": "Du fängst mit einem Raspberry Pi im Kinderzimmer an und hörst mit einem Hyperscale-Rechenzentrum auf (und dann geht es weiter: unter das Meer, in den Orbit, auf den Mond). Kauf Maschinen, halte Strom und Kühlung im Gleichgewicht und behalte deine Uptime im Auge. Ab und zu geht ein Alarm los: ein DDoS-Angriff, eine volle Festplatte, ein Deployment am Freitagnachmittag. Klick ihn rechtzeitig weg, sonst fällt alles aus. Verkauf die Firma, werde wiedergeboren und behalte Upgrades für dein nächstes Leben. Ein Idle-Spiel mit Witzen für alle, die schon einmal einen Server neu gestartet haben.",
+  "description": "You start with a Raspberry Pi in your bedroom and end with a hyperscale datacenter (and then it goes on: under the sea, to the Moon, into the multiverse, to the end of time, and back home to 127.0.0.1). Buy machines, keep power and cooling in balance, and watch your uptime. Now and then an alert fires: a DDoS attack, a full disk, a deploy on Friday afternoon. Click it away in time, or everything goes down. Sell the company, be reborn, and keep upgrades for your next life. An idle game with no end, and jokes for everyone who has ever restarted a server.",
+  "description_de": "Du fängst mit einem Raspberry Pi im Kinderzimmer an und hörst mit einem Hyperscale-Rechenzentrum auf (und dann geht es weiter: unter das Meer, auf den Mond, ins Multiversum, ans Ende der Zeit und wieder nach Hause zu 127.0.0.1). Kauf Maschinen, halte Strom und Kühlung im Gleichgewicht und behalte deine Uptime im Auge. Ab und zu geht ein Alarm los: ein DDoS-Angriff, eine volle Festplatte, ein Deployment am Freitagnachmittag. Klick ihn rechtzeitig weg, sonst fällt alles aus. Verkauf die Firma, werde wiedergeboren und behalte Upgrades für dein nächstes Leben. Ein Idle-Spiel ohne Ende, mit Witzen für alle, die schon einmal einen Server neu gestartet haben.",
   "controls": "Mouse or touch: click the picture of your machines to handle requests, and the buttons to buy things and answer alerts. Keyboard: Space handles a request, 1 and 2 answer an alert.",
   "controls_de": "Maus oder Touch: Klick auf das Bild deiner Maschinen, um Anfragen zu bearbeiten, und auf die Knöpfe, um einzukaufen und Alarme zu beantworten. Tastatur: Die Leertaste bearbeitet eine Anfrage, 1 und 2 beantworten einen Alarm.",
   "category": "strategy",
   "engine": "HTML/JS",
-  "version": "1.0",
-  "update_title": "First release",
+  "version": "1.1",
+  "update_title": "Beyond the universe",
   "notes": [
-    "The game is here: from a Raspberry Pi in the bedroom to a hyperscale datacenter, and far beyond",
-    "Sell your company, be reborn, and buy upgrades that stay forever",
-    "Three high-score lists and 30 achievements",
-    "English and German, with sound"
+    "Seven new machines after the simulated universe: the multiverse, the end of time, behind reality, and finally back home to 127.0.0.1",
+    "The space machines cost more, so later lives no longer fly past in seconds",
+    "No end: new localhost versions, a milestone every 100 machines, and compound interest without a last level",
+    "More reincarnation upgrades and levels, nine new alerts, eleven new upgrades",
+    "Four new achievements replace four early ones"
   ],
   "folder": "game",
   "cover_image": "cover.png",
@@ -34,20 +35,20 @@
       "icon": "👋"
     },
     {
-      "id": "moved-out",
-      "name": "Jet engine",
-      "name_de": "Düsentriebwerk",
-      "description": "Own a used rack server. The neighbours can hear it too.",
-      "description_de": "Besitze einen gebrauchten Rack-Server. Die Nachbarn hören ihn auch.",
-      "icon": "✈️"
+      "id": "fork",
+      "name": "Fork it",
+      "name_de": "Fork it",
+      "description": "Fork a universe. Now there are two of everything, including the bugs.",
+      "description_de": "Forke ein Universum. Jetzt gibt es alles zweimal, auch die Fehler.",
+      "icon": "🍴"
     },
     {
-      "id": "rack-em-up",
-      "name": "Rack 'em up",
-      "name_de": "Voll bestückt",
-      "description": "Own a full 42U rack.",
-      "description_de": "Besitze ein volles 42U-Rack.",
-      "icon": "🗄️"
+      "id": "last-light",
+      "name": "Last one out",
+      "name_de": "Wer zuletzt geht",
+      "description": "Host servers at the end of time. Turn off the lights when you're done.",
+      "description_de": "Betreib Server am Ende der Zeit. Mach das Licht aus, wenn du fertig bist.",
+      "icon": "🕯️"
     },
     {
       "id": "colo",
@@ -162,20 +163,20 @@
       "icon": "😴"
     },
     {
-      "id": "millionaire",
-      "name": "First million",
-      "name_de": "Erste Million",
-      "description": "Earn $1 million in total.",
-      "description_de": "Verdiene insgesamt 1 Million $.",
-      "icon": "💰"
+      "id": "home",
+      "name": "There's no place like 127.0.0.1",
+      "name_de": "Daheim ist 127.0.0.1",
+      "description": "Buy the last machine. It's a Raspberry Pi in a bedroom.",
+      "description_de": "Kauf die letzte Maschine. Es ist ein Raspberry Pi im Kinderzimmer.",
+      "icon": "🏠"
     },
     {
-      "id": "unicorn",
-      "name": "Unicorn",
-      "name_de": "Einhorn",
-      "description": "Earn $1 billion in total.",
-      "description_de": "Verdiene insgesamt 1 Milliarde $.",
-      "icon": "🦄"
+      "id": "ten-oh",
+      "name": "Ten point oh",
+      "name_de": "Zehn Punkt null",
+      "description": "Release localhost 10. The changelog says \"rewritten from scratch\".",
+      "description_de": "Veröffentliche localhost 10. Im Changelog steht «komplett neu geschrieben».",
+      "icon": "🔟"
     },
     {
       "id": "exit",

@@ -1,5 +1,5 @@
 // The game's rules, without any screen: the same code runs in the browser and in the tests.
-import { ACHIEVEMENTS, BASE_COOLING, BASE_POWER, COOLING, GROWTH, INCIDENTS, MILESTONES, PERKS, POWER, STAFF, STAGES, TIERS, UPGRADES } from "./data.js";
+import { ACHIEVEMENTS, BASE_COOLING, BASE_POWER, COOLING, GROWTH, INCIDENTS, MILESTONE_STEP, MILESTONES, PERKS, POWER, STAFF, STAGES, TIERS, UPGRADES } from "./data.js";
 
 export const SAVE_VERSION = 1;
 /** Seconds the temperature needs to follow the load, and the uptime to forget an outage. */
@@ -89,6 +89,9 @@ function effects(s) {
   fx.price = 1 - PERK.discount.per * (p.discount ?? 0);
   fx.upPrice = 1 - PERK.notes.per * (p.notes ?? 0);
   fx.share = shareBonus(s);
+  if (p.holiday) fx.hours += PERK.holiday.values[p.holiday - 1];
+  fx.outage = 1 - PERK.insurance.per * (p.insurance ?? 0);
+  fx.compound = PERK.compound.per ** (p.compound ?? 0);
   fx.luck = 1 + (p.luck ?? 0);
   fx.autoclick = p.autoclick ? PERK.autoclick.values[p.autoclick - 1] : 0;
   fx.autoinfra = !!p.autoinfra;
@@ -102,10 +105,15 @@ export const shareBonus = (s) => SHARE_BONUS + PERK.dividends.per * (s.perks.div
 export function milestoneMult(count) {
   let m = 1;
   for (const n of MILESTONES) if (count >= n) m *= 2;
+  const last = MILESTONES[MILESTONES.length - 1];
+  if (count >= last + MILESTONE_STEP) m *= 2 ** Math.floor((count - last) / MILESTONE_STEP);
   return m;
 }
-/** The next milestone for this count, or null after the last. */
-export const nextMilestone = (count) => MILESTONES.find((n) => count < n) ?? null;
+/** The next milestone for this count. There is always one more. */
+export function nextMilestone(count) {
+  const last = MILESTONES[MILESTONES.length - 1];
+  return MILESTONES.find((n) => count < n) ?? last + (Math.floor((count - last) / MILESTONE_STEP) + 1) * MILESTONE_STEP;
+}
 
 /** The biggest machine you own, as an index in TIERS. */
 export function topTier(s) {
@@ -168,7 +176,7 @@ export function derive(s) {
   if (pending.avail != null) avail = Math.min(avail, pending.avail);
   if (s.outage > 0) avail = 0;
 
-  const structural = baseRev * fx.rev * (1 + fx.share * s.shares) * powerFactor;
+  const structural = baseRev * fx.rev * fx.compound * (1 + fx.share * s.shares) * powerFactor;
   const sla = slaMult(s.uptime);
   /** Income without the incident or spike of the moment */
   const nominal = structural * thermalFactor * sla;
@@ -198,8 +206,12 @@ function earn(s, amount) {
 
 // ----- Buying -----
 
-/** What you pay of the list price: hardware gets cheaper with the discount perk. */
-export const priceMult = (s, kind) => (kind === "hw" ? 1 - PERK.discount.per * (s.perks.discount ?? 0) : 1);
+/** What you pay of the list price: hardware gets cheaper with the discount perk, staff with the headhunter. */
+export function priceMult(s, kind) {
+  if (kind === "hw") return 1 - PERK.discount.per * (s.perks.discount ?? 0);
+  if (kind === "st") return 1 - PERK.headhunter.per * (s.perks.headhunter ?? 0);
+  return 1;
+}
 
 /** The price of the next n of something you own `owned` of. */
 export function costFor(kind, id, owned, n = 1, mult = 1) {
@@ -239,6 +251,7 @@ export function buy(s, kind, id, n = 1, now = Date.now()) {
 /** Whether an upgrade is on offer: a machine's upgrades once you own enough of it, the others once you could nearly pay for them. */
 export function upgradeOffered(s, u) {
   if (s.up.includes(u.id)) return false;
+  if (u.after && !s.up.includes(u.after)) return false;
   return u.tier ? s.hw[u.tier] >= u.need : s.runEarned >= u.cost * 0.2;
 }
 
@@ -249,6 +262,7 @@ export function buyUpgrade(s, id) {
   const u = UPGRADE[id];
   if (!u || s.up.includes(id) || s.money < upgradeCost(s, u)) return false;
   if (u.tier && s.hw[u.tier] < u.need) return false;
+  if (u.after && !s.up.includes(u.after)) return false;
   s.money -= upgradeCost(s, u);
   s.up.push(id);
   return true;
@@ -264,15 +278,23 @@ export function click(s) {
 
 // ----- Perks: lasting advantages for stock options -----
 
+/** How many levels a perk has: an endless one never ends (a save keeps at most this many). */
+const ENDLESS_LEVELS = 1000;
+export const perkLevels = (p) => (p.endless ? Infinity : p.costs.length);
+/** What level `level` + 1 of a perk costs, or null when there is none. */
+export function levelCost(p, level) {
+  if (p.endless) return level < ENDLESS_LEVELS ? p.endless.cost * p.endless.growth ** level : null;
+  return p.costs[level] ?? null;
+}
 /** Stock options already spent on perks. */
 export function spentShares(s) {
   let n = 0;
-  for (const p of PERKS) for (let l = 0; l < (s.perks[p.id] ?? 0); l++) n += p.costs[l];
+  for (const p of PERKS) for (let l = 0; l < (s.perks[p.id] ?? 0); l++) n += levelCost(p, l);
   return n;
 }
 export const freeShares = (s) => s.shares - spentShares(s);
 /** The price of a perk's next level, or null when it has them all. */
-export const perkCost = (s, id) => PERK[id]?.costs[s.perks[id] ?? 0] ?? null;
+export const perkCost = (s, id) => (PERK[id] ? levelCost(PERK[id], s.perks[id] ?? 0) : null);
 /** Whether the upgrade it builds on is there. */
 export function perkOpen(s, id) {
   const needs = PERK[id]?.needs;
@@ -370,7 +392,7 @@ function fail(s, def, rng, ev) {
     s.money -= lost;
   }
   if (f.outage) {
-    s.outage = f.outage;
+    s.outage = f.outage * d.fx.outage;
     s.stats.streak = 0;
   }
   if (f.cool) s.debuff = { cool: f.cool, left: f.coolTime };
@@ -410,8 +432,6 @@ function unlock(s, id, ev) {
 function checkAchievements(s, d, ev) {
   const has = (id) => s.hw[id] > 0;
   if (s.hw.pi >= 2 || d.tier > 0) unlock(s, "hello-world", ev);
-  if (has("server")) unlock(s, "moved-out", ev);
-  if (has("rack")) unlock(s, "rack-em-up", ev);
   if (has("cage")) unlock(s, "colo", ev);
   if (has("hall")) unlock(s, "datacenter", ev);
   if (has("region")) unlock(s, "hyperscaler", ev);
@@ -419,6 +439,10 @@ function checkAchievements(s, d, ev) {
   if (has("moon")) unlock(s, "moon", ev);
   if (has("dyson")) unlock(s, "dyson", ev);
   if (has("simulation")) unlock(s, "simulation", ev);
+  if (has("fork")) unlock(s, "fork", ev);
+  if (has("heatdeath")) unlock(s, "last-light", ev);
+  if (has("home")) unlock(s, "home", ev);
+  if (s.up.includes("release-10")) unlock(s, "ten-oh", ev);
   if (s.uptime >= 0.999) unlock(s, "three-nines", ev);
   if (s.uptime >= 0.99999) unlock(s, "five-nines", ev);
   if (s.temp >= TEMP_HOT) unlock(s, "space-heater", ev);
@@ -429,8 +453,6 @@ function checkAchievements(s, d, ev) {
   if (s.up.includes("ipv6")) unlock(s, "ipv6", ev);
   if (s.up.length >= 40) unlock(s, "patched", ev);
   if (d.coverage >= 1 && d.tier >= 3) unlock(s, "sleep", ev);
-  if (s.totalEarned >= 1e6) unlock(s, "millionaire", ev);
-  if (s.totalEarned >= 1e9) unlock(s, "unicorn", ev);
   if (s.stats.exits > 0) unlock(s, "exit", ev);
   if (s.stats.exits >= 5) unlock(s, "serial", ev);
   if (PERKS.some((p) => s.perks[p.id] > 0)) unlock(s, "perk", ev);
@@ -582,7 +604,7 @@ export function deserialize(text, now = Date.now()) {
   s.uptime = num(o.uptime, START_UPTIME, 0, 1);
   s.shares = Math.floor(num(o.shares, 0));
   for (const p of PERKS) {
-    const level = Math.floor(num(o.perks?.[p.id], 0, 0, p.costs.length));
+    const level = Math.floor(num(o.perks?.[p.id], 0, 0, Math.min(perkLevels(p), ENDLESS_LEVELS)));
     if (level) s.perks[p.id] = level;
   }
   // A save can't have spent more stock options than it has: drop perks until it fits.

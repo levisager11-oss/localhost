@@ -2,7 +2,7 @@
 import { ACHIEVEMENT_ICONS, ACHIEVEMENTS, COOLING, PERKS, POWER, STAFF, TIERS, UPGRADES } from "./data.js";
 import {
   applyOffline, beginRun, buy, buyPerk, buyUpgrade, canExit, click, costFor, derive, deserialize, exit, exitNeeds, exitShares,
-  freeShares, incidentAction, incidentDef, maxAffordable, milestoneMult, newState, nextMilestone, perkCost, perkOpen, priceMult,
+  freeShares, incidentAction, incidentDef, maxAffordable, milestoneMult, newState, nextMilestone, perkCost, perkLevels, perkOpen, priceMult,
   score, serialize, shareBonus, slaTier, TEMP_HOT, TEMP_OK, tick, upgradeCost, upgradeOffered,
 } from "./sim.js";
 import { browserLang, FLAVOR, getLang, setLang, t, upgradeText } from "./i18n.js";
@@ -476,7 +476,8 @@ function openExit() {
 function perkValue(p, level) {
   if (p.id === "seed") return money(p.values[level - 1]);
   if (p.id === "starter") return t(`perk.starter.v${level}`);
-  if (p.id === "autoclick") return num(p.values[level - 1]);
+  if (p.id === "autoclick" || p.id === "holiday") return num(p.values[level - 1]);
+  if (p.id === "compound") return num(p.per ** level, true);
   if (p.id === "luck") return `${level + 1}×`;
   if (p.id === "dividends") return `${num(2 + level)}%`;
   return p.per ? percent(p.per * level) : "";
@@ -501,9 +502,11 @@ function drawPerks() {
     b.disabled = !state.reborn || cost == null || !open || free < cost;
     const main = el("div", "main");
     const head = el("div", "head");
-    head.append(el("strong", null, t(`perk.${p.id}.name`)), el("b", "count", cost == null ? t("reborn.max") : t("reborn.level", { a: level, b: p.costs.length })));
+    const levels = perkLevels(p);
+    const count = cost == null ? t("reborn.max") : levels === Infinity ? t("reborn.level.endless", { a: level }) : t("reborn.level", { a: level, b: levels });
+    head.append(el("strong", null, t(`perk.${p.id}.name`)), el("b", "count", count));
     // Show what the next level gives; once complete, what you have.
-    const fx = t(`perk.${p.id}.fx`, { v: perkValue(p, Math.min(level + 1, p.costs.length)) });
+    const fx = t(`perk.${p.id}.fx`, { v: perkValue(p, Math.min(level + 1, levels)) });
     main.append(head, el("span", "desc", t(`perk.${p.id}.desc`)), el("span", "fx", fx));
     if (!open) main.append(el("span", "warn", t("reborn.needs", { name: t(`perk.${p.needs.id}.name`) })));
     b.append(main, el("span", "cost", cost == null ? "✓" : t("reborn.cost", { n: num(cost) })));
