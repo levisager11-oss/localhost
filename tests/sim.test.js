@@ -1,12 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { ACHIEVEMENT_ICONS, ACHIEVEMENTS, COOLING, INCIDENTS, PERKS, POWER, STAFF, STAGES, TIERS, UPGRADES } from "../game/js/data.js";
+import { ACHIEVEMENT_ICONS, ACHIEVEMENTS, COOLING, INCIDENTS, PERKS, POWER, RELEASES, STAFF, STAGES, TIERS, UPGRADES } from "../game/js/data.js";
 import {
   applyOffline, beginRun, buy, buyPerk, buyUpgrade, canExit, click, costFor, derive, deserialize, exit, exitShares, freeShares,
-  incidentAction, incidentDef, maxAffordable, milestoneMult, newState, perkCost, score, serialize, slaMult, tick, upgradeOffered,
+  incidentAction, incidentDef, maxAffordable, milestoneMult, newState, nextMilestone, perkCost, priceMult, score, serialize, slaMult,
+  spentShares, tick, upgradeOffered,
 } from "../game/js/sim.js";
 import { setLang, TEXTS, upgradeText } from "../game/js/i18n.js";
+import { num, watts } from "../game/js/format.js";
 
 /** A random source that always says the same: the tests decide what "random" means. */
 const fixed = (v) => () => v;
@@ -41,10 +43,17 @@ test("prices rise, and buying takes exactly the money", () => {
   assert.equal(buy(s, "hw", "nope", 1), 0);
 });
 
-test("milestones double what a machine earns", () => {
+test("milestones double what a machine earns, and never run out", () => {
   assert.equal(milestoneMult(9), 1);
   assert.equal(milestoneMult(10), 2);
   assert.equal(milestoneMult(25), 4);
+  assert.equal(milestoneMult(400), 2 ** 8);
+  assert.equal(milestoneMult(499), 2 ** 8);
+  assert.equal(milestoneMult(500), 2 ** 9);
+  assert.equal(milestoneMult(1000), 2 ** 14);
+  assert.equal(nextMilestone(0), 10);
+  assert.equal(nextMilestone(400), 500);
+  assert.equal(nextMilestone(1234), 1300);
 });
 
 test("too many machines for the socket: income drops", () => {
@@ -329,7 +338,7 @@ test("a long game stays sane", () => {
 
 test("every thing in the game has its texts in both languages", () => {
   const need = [];
-  for (const [p, list] of [["hw", TIERS], ["pw", POWER], ["cl", COOLING], ["st", STAFF], ["up", UPGRADES.filter((u) => !u.tier)], ["perk", PERKS]]) {
+  for (const [p, list] of [["hw", TIERS], ["pw", POWER], ["cl", COOLING], ["st", STAFF], ["up", UPGRADES.filter((u) => !u.tier && !u.kind)], ["perk", PERKS]]) {
     for (const x of list) need.push(`${p}.${x.id}.name`, `${p}.${x.id}.desc`, ...(p === "up" || p === "perk" ? [`${p}.${x.id}.fx`] : []));
   }
   for (const i of INCIDENTS) {
@@ -371,4 +380,98 @@ test("toki.json lists the game's achievements and boards", () => {
   assert.deepEqual(toki.boards.map((b) => b.id), ["", "streak", "speedrun"]);
   assert.equal(toki.folder, "game");
   assert.match(toki.slug, /^[a-z0-9]+(-[a-z0-9]+)*$/);
+});
+
+test("the late game: prices keep rising, and the last machine is a Raspberry Pi again", () => {
+  for (const list of [TIERS, POWER, COOLING, STAFF]) {
+    for (let i = 1; i < list.length; i++) assert.ok(list[i].cost > list[i - 1].cost, list[i].id);
+  }
+  // Every machine after the first has a stage, and every stage has machines.
+  for (const t of TIERS) assert.ok(STAGES.includes(t.stage), t.id);
+  for (const stage of STAGES) assert.ok(TIERS.some((t) => t.stage === stage), stage);
+  const home = TIERS[TIERS.length - 1];
+  assert.equal(home.id, "home");
+  assert.equal(home.power, TIERS[0].power);
+  // Power and cooling can keep up with the biggest machines.
+  assert.ok(POWER[POWER.length - 1].cap > 4 * TIERS[TIERS.length - 2].power);
+  assert.ok(COOLING[COOLING.length - 1].cap > 4 * TIERS[TIERS.length - 2].power);
+  // Prices stay numbers a computer can count.
+  for (const u of UPGRADES) assert.ok(Number.isFinite(u.cost) && u.cost < 1e300, u.id);
+});
+
+test("new versions of localhost come one after another", () => {
+  const s = newState(0);
+  const v2 = UPGRADES.find((u) => u.id === `release-${RELEASES.first}`);
+  const v3 = UPGRADES.find((u) => u.id === `release-${RELEASES.first + 1}`);
+  s.runEarned = v3.cost;
+  s.money = v3.cost * 2;
+  assert.equal(upgradeOffered(s, v3), false, "2.0 comes first");
+  assert.equal(buyUpgrade(s, v3.id), false);
+  assert.equal(upgradeOffered(s, v2), true);
+  const before = derive(s).fx.rev;
+  assert.equal(buyUpgrade(s, v2.id), true);
+  assert.equal(derive(s).fx.rev, before * RELEASES.rev);
+  assert.equal(upgradeOffered(s, v3), true);
+  for (let v = RELEASES.first; v <= 10; v++) s.up.push(`release-${v}`);
+  tick(s, 0.1, fixed(0.5));
+  assert.ok(s.ach.includes("ten-oh"));
+  setLang("de");
+  assert.equal(upgradeText(v3, "name"), "localhost 3.0");
+  setLang("en");
+});
+
+test("compound interest never ends", () => {
+  let s = newState(0);
+  s.runEarned = s.totalEarned = 1e30;
+  s = exit(s, 0);
+  s.perks = { seed: 1, discount: 2, runbooks: 1, bonus: 1 };
+  assert.equal(buyPerk(s, "compound"), false, "builds on dividends");
+  assert.equal(buyPerk(s, "dividends"), true);
+  const free = freeShares(s);
+  let bought = 0;
+  while (buyPerk(s, "compound")) bought++;
+  assert.ok(bought >= 15, `only ${bought} levels`);
+  assert.ok(freeShares(s) >= 0 && freeShares(s) < perkCost(s, "compound"));
+  assert.equal(free - freeShares(s), spentShares(s) - (spentShares({ perks: { ...s.perks, compound: 0 } })));
+  const rev = derive(s).fx.compound;
+  assert.ok(Math.abs(rev - 1.1 ** bought) < 1e-9 * rev);
+  // A save keeps every level it paid for.
+  assert.equal(deserialize(serialize(s)).perks.compound, bought);
+});
+
+test("the new reincarnation upgrades: cheaper staff, longer holidays, shorter outages", () => {
+  let s = newState(0);
+  s.runEarned = s.totalEarned = 1e18;
+  s = exit(s, 0);
+  s.perks = { runbooks: 1, reputation: 1, nightshift: 1 };
+  for (const id of ["headhunter", "holiday", "insurance"]) assert.equal(buyPerk(s, id), true, id);
+  beginRun(s, 0);
+  assert.ok(Math.abs(priceMult(s, "st") - 0.8) < 1e-9);
+  assert.equal(derive(s).fx.hours, 8 + 24);
+  s.hw.tower = 1;
+  s.nextIncident = 0;
+  tick(s, 0.1, fixed(0.5));
+  assert.ok(s.incident);
+  const def = incidentDef(s.incident.id);
+  s.st.intern = 0;
+  tick(s, s.incident.left + 0.1, fixed(0.99));
+  if (def.fail?.outage) assert.ok(Math.abs(s.outage - def.fail.outage * 0.75) < 1e-9);
+});
+
+test("big numbers still read well", () => {
+  setLang("en");
+  assert.equal(num(1.5e36), "1.50Ud");
+  assert.equal(num(2e63), "2.00Vg");
+  assert.equal(num(1e70), "1.00e70");
+  assert.equal(watts(2e15), "2.00 PW");
+  assert.equal(watts(4.7e20), "470 EW");
+  assert.equal(watts(1e40), "1.00e40 W");
+  setLang("de");
+  assert.equal(num(1.5e36), "1,50 Sext.");
+  setLang("en");
+});
+
+test("every stage has a picture", () => {
+  const scene = readFileSync(new URL("../game/js/scene.js", import.meta.url), "utf8");
+  for (const stage of STAGES) assert.match(scene, new RegExp(`\\n    ${stage}\\(\\) \\{`), stage);
 });

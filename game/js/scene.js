@@ -1,5 +1,5 @@
 // The picture of where your machines stand: a small pixel scene that grows with you, from the
-// bedroom to somewhere else entirely. Lights blink, fans turn, and it shows when things go wrong.
+// bedroom to the end of time, and back to the bedroom. Lights blink, fans turn, and it shows when things go wrong.
 
 const H = 72;
 const GREEN = "#3ddc55";
@@ -39,6 +39,14 @@ export function createScene(canvas) {
     if (view.mode === "down") return px(x, y, 1, 1, RED);
     const on = hash(id, Math.floor(f / (2 + Math.floor(hash(id) * 5)))) > 0.35;
     px(x, y, 1, 1, view.mode === "slow" ? (on ? AMBER : "#6b4b08") : on ? GREEN : DIM);
+  }
+  /** A circle's outline, one pixel thick. */
+  function ring(cx, cy, r, c, from = 0, to = Math.PI * 2) {
+    const steps = Math.max(12, Math.round(r * 7));
+    for (let i = 0; i <= steps; i++) {
+      const a = from + ((to - from) * i) / steps;
+      px(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 1, 1, c);
+    }
   }
   const stars = (n, seed, maxY = H) => {
     for (let i = 0; i < n; i++) {
@@ -388,6 +396,159 @@ export function createScene(canvas) {
         px(x + 22, y + 13, 5, 2, "#2e8b57");
         led(x + 23, y + 13, 1300 + i);
       }
+    },
+    multiverse() {
+      px(0, 0, W, H, "#0a0716");
+      stars(30, 23);
+      // the history of everything, as a git graph: one main line, and a branch for every universe
+      const y0 = H - 7;
+      px(0, y0, W, 1, "#5b4b8a");
+      for (let x = (-f % 10) + 10; x < W; x += 10) disc(x, y0, 1, "#b79cff");
+      const forks = some(view.hw.fork ?? 0, Math.max(2, Math.floor(W / 30)), 1.2);
+      const spots = [];
+      for (let i = 0; i < forks; i++) {
+        const x = Math.round(((i + 0.5) * W) / forks);
+        const y = 14 + Math.round(hash(i, 24) * 22) + Math.round(Math.sin(f / 9 + i) * 1.5);
+        const r = 6 + Math.round(hash(24, i) * 4);
+        spots.push({ x, y, r });
+        // the branch, from the main line up to its universe
+        const from = x + (i % 2 ? 8 : -8);
+        for (let k = 0; k <= 16; k++) px(from + ((x - from) * k) / 16, y0 + ((y + r - y0) * k) / 16, 1, 1, "#5b4b8a");
+      }
+      const mesh = some(view.hw.mesh ?? 0, 12, 1.5);
+      for (let i = 0; i < mesh && spots.length > 1; i++) {
+        const a = spots[i % spots.length];
+        const b = spots[(i * 2 + 1) % spots.length];
+        if (a === b) continue;
+        const t = ((f + i * 7) % 24) / 24;
+        ctx.globalAlpha = 0.35;
+        for (let k = 0; k <= 20; k++) px(a.x + ((b.x - a.x) * k) / 20, a.y + ((b.y - a.y) * k) / 20, 1, 1, "#7fe0ff");
+        ctx.globalAlpha = 1;
+        px(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, 2, 1, "#dff8ff");
+      }
+      for (let i = 0; i < spots.length; i++) {
+        const { x, y, r } = spots[i];
+        disc(x, y, r, "#140c2a");
+        for (let k = 0; k < 5; k++) px(x - r / 2 + hash(i, k) * r, y - r / 2 + hash(k, i) * r, 1, 1, k % 2 ? "#ffd0f0" : "#b79cff");
+        ring(x, y, r, i % 3 ? "#b79cff" : "#ffd0f0");
+        led(x, y + r - 2, 1400 + i);
+      }
+    },
+    time() {
+      for (let y = 0; y < H; y++) px(0, y, W, 1, `rgb(${Math.round(24 - y / 4)},${Math.round(8 - y / 12)},${Math.round(12 - y / 8)})`);
+      // the last stars, going out one after another
+      for (let i = 0; i < 22; i++) {
+        if (hash(i, Math.floor(f / 40)) < 0.25) continue;
+        px(hash(i, 25) * W, hash(25, i) * (H - 20), 1, 1, i % 4 ? "#7a3b3b" : "#d08a5a");
+      }
+      const clocks = some(view.hw.loop ?? 0, Math.max(2, Math.floor(W / 26)), 1.2);
+      for (let i = 0; i < clocks; i++) {
+        const x = Math.round(((i + 0.5) * W) / clocks);
+        const y = 18 + Math.round(hash(i, 26) * 8);
+        const r = 7;
+        disc(x, y, r, "#1d1418");
+        ring(x, y, r, "#c9a227");
+        for (let h = 0; h < 12; h += 3) px(x + Math.cos((h / 12) * Math.PI * 2) * (r - 2), y + Math.sin((h / 12) * Math.PI * 2) * (r - 2), 1, 1, "#8a6d3b");
+        // every other clock runs backwards
+        const a = ((i % 2 ? -1 : 1) * f) / 6 + i;
+        for (let k = 1; k < r - 1; k++) px(x + Math.cos(a) * k, y + Math.sin(a) * k, 1, 1, "#f0c674");
+        for (let k = 1; k < r - 3; k++) px(x + Math.cos(a / 12) * k, y + Math.sin(a / 12) * k, 1, 1, "#c9a227");
+      }
+      // at the very end: a few racks, lit by one candle
+      const ground = H - 6;
+      px(0, ground, W, 6, "#120c0e");
+      const racks = some(view.hw.heatdeath ?? 0, Math.floor((W - 30) / 11), 1);
+      if (racks) {
+        const cx = 10;
+        const flick = hash(7, Math.floor(f / 2)) > 0.5 ? 1 : 0;
+        // its light on the floor
+        ctx.globalAlpha = 0.35;
+        px(cx - 6 - flick, ground, 13 + flick * 2, 1, "#ffcf5a");
+        ctx.globalAlpha = 0.15;
+        px(cx - 10, ground + 1, 21, 1, "#ffcf5a");
+        ctx.globalAlpha = 1;
+        px(cx - 1, ground - 6, 3, 6, "#e8e6e1");
+        px(cx, ground - 8 - flick, 1, 2, "#ffd98a");
+        px(cx, ground - 7, 1, 1, "#ff8a3a");
+      }
+      for (let i = 0; i < racks; i++) rack(22 + i * 11, ground, 1500 + i, 18);
+    },
+    source() {
+      px(0, 0, W, H, "#070d0a");
+      // the source code of reality, scrolling past: mostly comments
+      const cols = some(view.hw.kernel ?? 0, Math.max(1, Math.floor(W / 52)), 1);
+      const colors = ["#3ddc55", "#5d6a7d", "#5d6a7d", "#c9a227", "#7fe0ff", "#b79cff"];
+      for (let c = 0; c < cols; c++) {
+        const x0 = 4 + c * Math.floor(W / cols);
+        const cw = Math.floor(W / cols) - 8;
+        for (let row = 0; row < 18; row++) {
+          const line = row + Math.floor(f / 4) + c * 31;
+          const y = row * 4 - ((f % 4) * 1) + 2;
+          let x = x0 + (hash(line, 2) > 0.6 ? 4 : 0) + (hash(line, 3) > 0.85 ? 4 : 0);
+          for (let w = 0; w < 4 && x < x0 + cw; w++) {
+            const len = 2 + Math.floor(hash(line, w) * 9);
+            px(x, y, Math.min(len, x0 + cw - x), 2, colors[Math.floor(hash(w, line) * colors.length)]);
+            x += len + 2;
+          }
+        }
+        if (f % 8 < 4) px(x0, 34, 1, 3, "#dfe7ff");
+      }
+      const dreamers = some(view.hw.dreamer ?? 0, 3, 1);
+      for (let i = 0; i < dreamers; i++) {
+        // a giant closed eye, asleep. An alert makes it stir.
+        const x = Math.round(((i + 0.5) * W) / dreamers);
+        const y = H - 18;
+        const open = view.alert ? 2 + (f % 6 < 3 ? 1 : 0) : 0;
+        ctx.globalAlpha = 0.85;
+        disc(x, y, 10, "#070d0a");
+        ctx.globalAlpha = 1;
+        ring(x, y - 6, 12, "#dfe3ea", Math.PI * 0.2, Math.PI * 0.8);
+        if (open) {
+          ring(x, y + 12, 12, "#dfe3ea", -Math.PI * 0.8, -Math.PI * 0.2);
+          disc(x, y + 2, open, "#7fe0ff");
+        }
+        for (let k = 0; k < 5; k++) px(x - 8 + k * 4, y + 5, 1, 2, "#8794a8"); // lashes
+        const z = (f + i * 9) % 30;
+        ctx.globalAlpha = 1 - z / 30;
+        px(x + 10 + z / 4, y - 6 - z, 3, 1, "#dfe3ea");
+        px(x + 11 + z / 4, y - 5 - z, 1, 1, "#dfe3ea");
+        px(x + 10 + z / 4, y - 4 - z, 3, 1, "#dfe3ea");
+        ctx.globalAlpha = 1;
+      }
+    },
+    home() {
+      // Back where it started: the bedroom, one Raspberry Pi. Through the window, everything else.
+      const saved = view;
+      view = { ...view, hw: { pi: 1 } };
+      places.bedroom();
+      view = saved;
+      const wx = Math.round(W * 0.6);
+      px(wx + 1, 9, 22, 18, "#0d0618");
+      px(wx + 12, 9, 1, 18, "#6b7280");
+      for (let g = 0; g < 2; g++) {
+        const gx = wx + 6 + g * 11;
+        for (let i = 0; i < 12; i++) {
+          const a = i / 2 + f / 30 + g * 2;
+          px(gx + Math.cos(a) * i * 0.35, 18 + Math.sin(a) * i * 0.3, 1, 1, i % 3 ? "#b79cff" : "#ffd0f0");
+        }
+      }
+      // the Pi
+      const floor = H - 10;
+      const x = Math.round(W * 0.34) + 2;
+      const y = floor - 16;
+      // a little sparkle around it: it has earned it
+      for (let i = 0; i < 3; i++) {
+        const a = f / 5 + (i * Math.PI * 2) / 3;
+        px(x + 2 + Math.cos(a) * 5, y - 1 + Math.sin(a) * 3, 1, 1, i % 2 ? "#ffe9a8" : "#fff");
+      }
+      const beams = some(view.hw.home ?? 0, 8, 1);
+      ctx.globalAlpha = 0.25;
+      for (let i = 0; i < beams; i++) {
+        const tx = wx + 3 + (i * 19) / Math.max(1, beams - 1 || 1);
+        const t = ((f + i * 5) % 20) / 20;
+        px(x + 2 + (tx - x - 2) * t, y + (16 - y) * t, 1, 1, "#ffe9a8");
+      }
+      ctx.globalAlpha = 1;
     },
   };
 
