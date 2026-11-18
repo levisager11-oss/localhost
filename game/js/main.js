@@ -65,6 +65,8 @@ function save() {
   } catch {
     /* full or blocked */
   }
+  window.toki?.score(score(state));
+  if (state.stats.speedrun > 0) window.toki?.score(state.stats.speedrun, "speedrun");
 }
 
 // ----- Small things: log, toasts -----
@@ -133,6 +135,7 @@ function handle(events) {
       log("ok", t("log.recovered"));
     } else if (e.type === "achievement") {
       play("achievement");
+      window.toki?.achievement(e.id);
       toast(t("toast.ach", { name: t(`ach.${e.id}.name`) }));
     }
   }
@@ -815,6 +818,7 @@ function start() {
   handle(events);
   draw();
   scene.start();
+  for (const id of state.ach) window.toki?.achievement(id);
   if (state.reborn) openPerks();
   else if (out) welcomeBack(out);
   last = performance.now();
