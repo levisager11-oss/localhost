@@ -2,7 +2,7 @@
   "name": "localhost",
   "version": "1.0.0",
   "private": true,
-  "description": "An idle game about growing a Raspberry Pi in your bedroom into a hyperscale datacenter.",
+  "description": "An idle game about growing a Raspberry Pi in your bedroom into a hyperscale datacenter. Made for Toki.",
   "type": "module",
   "scripts": {
     "test": "node --test",

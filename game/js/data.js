@@ -194,7 +194,7 @@ export const INCIDENTS = [
 /** Where you are, by the biggest machine you own. */
 export const STAGES = ["bedroom", "basement", "closet", "colo", "datacenter", "campus", "hyperscale", "ocean", "orbit", "moon", "star", "universe"];
 
-/** One emoji per achievement. */
+/** One emoji per achievement, as in toki.json. */
 export const ACHIEVEMENT_ICONS = {
   "hello-world": "👋", "moved-out": "✈️", "rack-em-up": "🗄️", colo: "🔒", datacenter: "🏢", hyperscaler: "☁️",
   "three-nines": "📈", "five-nines": "🏆", "space-heater": "🔥", breaker: "⚡", "it-was-dns": "🔍", ddos: "🛡️",
@@ -202,7 +202,7 @@ export const ACHIEVEMENT_ICONS = {
   "into-orbit": "🛰️", moon: "🌙", dyson: "☀️", simulation: "🌌", perk: "🪂", serial: "🔁", away: "🏖️", carpal: "🖱️", patched: "🩹", fleet: "🚢",
 };
 
-/** Achievement ids. Their names and descriptions are in i18n.js. */
+/** Achievement ids, as in toki.json. */
 export const ACHIEVEMENTS = [
   "hello-world", "moved-out", "rack-em-up", "colo", "datacenter", "hyperscaler",
   "three-nines", "five-nines", "space-heater", "breaker", "it-was-dns", "ddos",

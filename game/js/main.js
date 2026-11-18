@@ -1,4 +1,4 @@
-// The screen: draws the dashboard, takes clicks and saves the game.
+// The screen: draws the dashboard, takes clicks, saves the game, and talks to Toki.
 import { ACHIEVEMENT_ICONS, ACHIEVEMENTS, COOLING, PERKS, POWER, STAFF, TIERS, UPGRADES } from "./data.js";
 import {
   applyOffline, beginRun, buy, buyPerk, buyUpgrade, canExit, click, costFor, derive, deserialize, exit, exitNeeds, exitShares,
@@ -37,6 +37,9 @@ function icon(name, size = 16) {
   return span;
 }
 
+/** Inside Toki the game runs in a frame, and Toki shows achievements itself. */
+const inToki = window.parent !== window;
+
 let state;
 let d;
 let tab = "hw";
@@ -66,6 +69,32 @@ function save() {
     /* full or blocked */
   }
 }
+
+// ----- Toki: high scores and achievements (outside Toki these do nothing) -----
+
+const sent = { score: -1, streak: 0, speedrun: 0, at: 0 };
+function report(force = false) {
+  const toki = window.toki;
+  if (!toki?.score) return;
+  const now = Date.now();
+  if (!force && now - sent.at < 30_000) return;
+  sent.at = now;
+  const points = score(state);
+  if (points > sent.score) {
+    sent.score = points;
+    toki.score(points);
+  }
+  const streak = Math.floor(state.stats.bestStreak) * 1000;
+  if (streak > sent.streak && (force || streak >= sent.streak + 10_000)) {
+    sent.streak = streak;
+    toki.score(streak, "streak");
+  }
+  if (state.stats.speedrun && state.stats.speedrun !== sent.speedrun) {
+    sent.speedrun = state.stats.speedrun;
+    toki.score(state.stats.speedrun, "speedrun");
+  }
+}
+const achieved = (id) => window.toki?.achievement?.(id);
 
 // ----- Small things: log, toasts -----
 
@@ -132,8 +161,10 @@ function handle(events) {
       play("back");
       log("ok", t("log.recovered"));
     } else if (e.type === "achievement") {
+      achieved(e.id);
       play("achievement");
-      toast(t("toast.ach", { name: t(`ach.${e.id}.name`) }));
+      const name = t(`ach.${e.id}.name`);
+      if (!inToki) toast(t("toast.ach", { name }));
     }
   }
 }
@@ -600,6 +631,7 @@ function frame() {
   if (now - sampled >= 1000) {
     sampled = now;
     sample();
+    report();
     if ((nextFlavor -= 1) <= 0) {
       nextFlavor = 15 + Math.random() * 30;
       log("info", FLAVOR[Math.floor(Math.random() * FLAVOR.length)]);
@@ -707,6 +739,7 @@ function wire() {
   $("btn-exit-go").addEventListener("click", () => {
     const next = exit(state);
     if (!next) return;
+    report(true);
     state = next;
     fresh();
     $("dlg-exit").close();
@@ -785,6 +818,7 @@ function wire() {
       paused = true;
       scene.stop();
       state.lastSeen = Date.now();
+      report(true);
       save();
     } else if (paused) {
       paused = false;
@@ -796,7 +830,10 @@ function wire() {
       draw();
     }
   });
-  window.addEventListener("pagehide", save);
+  window.addEventListener("pagehide", () => {
+    report(true);
+    save();
+  });
 }
 
 function start() {
@@ -817,6 +854,8 @@ function start() {
   scene.start();
   if (state.reborn) openPerks();
   else if (out) welcomeBack(out);
+  // Achievements earned before Toki was listening (or outside Toki) count there too.
+  setTimeout(() => state.ach.forEach(achieved), 2000);
   last = performance.now();
   setInterval(frame, 250);
   setInterval(save, 10_000);
