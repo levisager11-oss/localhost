@@ -1,4 +1,4 @@
-// Every text of the game, in English and German. German uses "ss" instead of "ß" (Swiss spelling).
+// Every text of the game, in English and German. German uses "ss" instead of "ß", like Toki.
 
 const en = {
   "crumbs": "Dashboards",

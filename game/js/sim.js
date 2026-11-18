@@ -20,6 +20,8 @@ export const OFFLINE_HOURS = 8;
 /** What the machines earn while you are away with nobody on call, and what full cover adds. */
 const AWAY_BASE = 0.25;
 const AWAY_STAFF = 0.65;
+/** Toki keeps scores up to this. */
+const MAX_SCORE = 1_000_000_000_000;
 
 const KINDS = { hw: TIERS, pw: POWER, cl: COOLING, st: STAFF };
 const byId = (list) => Object.fromEntries(list.map((x) => [x.id, x]));
@@ -184,8 +186,8 @@ export function derive(s) {
   };
 }
 
-/** The score: 1000 points for every ten times more money earned in total. */
-export const score = (s) => Math.floor(1000 * Math.log10(1 + s.totalEarned));
+/** The leaderboard score: 1000 points for every ten times more money earned in total. */
+export const score = (s) => Math.min(MAX_SCORE, Math.floor(1000 * Math.log10(1 + s.totalEarned)));
 
 function earn(s, amount) {
   if (!(amount > 0)) return;

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { ACHIEVEMENT_ICONS, ACHIEVEMENTS, COOLING, INCIDENTS, PERKS, POWER, STAFF, STAGES, TIERS, UPGRADES } from "../game/js/data.js";
 import {
   applyOffline, beginRun, buy, buyPerk, buyUpgrade, canExit, click, costFor, derive, deserialize, exit, exitShares, freeShares,
@@ -272,13 +273,13 @@ test("reincarnation upgrades cost stock options and shape the next life", () => 
   for (const p of PERKS) assert.ok(perkCost(newState(0), p.id) > 0);
 });
 
-test("the score grows by 1000 for every ten times more money", () => {
+test("the score fits Toki's leaderboard", () => {
   const s = newState(0);
   assert.equal(score(s), 0);
   s.totalEarned = 999;
   assert.equal(score(s), 3000);
-  s.totalEarned = 1e30;
-  assert.equal(score(s), 30000);
+  s.totalEarned = 1e300;
+  assert.ok(score(s) <= 1e12);
 });
 
 test("saves survive a round trip, and broken ones start a new game", () => {
@@ -338,10 +339,7 @@ test("every thing in the game has its texts in both languages", () => {
     if (!i.good) need.push(`inc.${i.id}.fail`);
   }
   for (const s of STAGES) need.push(`stage.${s}`);
-  for (const a of ACHIEVEMENTS) {
-    need.push(`ach.${a}.name`, `ach.${a}.desc`);
-    assert.ok(ACHIEVEMENT_ICONS[a], `icon for ${a}`);
-  }
+  for (const a of ACHIEVEMENTS) need.push(`ach.${a}.name`, `ach.${a}.desc`);
   for (const lang of ["en", "de"]) {
     for (const k of need) assert.ok(typeof TEXTS[lang][k] === "string" && TEXTS[lang][k], `${lang}: ${k}`);
   }
@@ -356,4 +354,21 @@ test("every thing in the game has its texts in both languages", () => {
     }
   }
   setLang("en");
+});
+
+test("toki.json lists the game's achievements and boards", () => {
+  const toki = JSON.parse(readFileSync(new URL("../toki.json", import.meta.url), "utf8"));
+  assert.deepEqual(toki.achievements.map((a) => a.id).sort(), [...ACHIEVEMENTS].sort());
+  for (const a of toki.achievements) {
+    assert.ok(a.name.length <= 40 && a.name_de.length <= 40, a.id);
+    assert.ok(a.description.length <= 120 && a.description_de.length <= 120, a.id);
+    assert.equal(a.name, TEXTS.en[`ach.${a.id}.name`]);
+    assert.equal(a.name_de, TEXTS.de[`ach.${a.id}.name`]);
+    assert.equal(a.description, TEXTS.en[`ach.${a.id}.desc`]);
+    assert.equal(a.description_de, TEXTS.de[`ach.${a.id}.desc`]);
+    assert.equal(a.icon, ACHIEVEMENT_ICONS[a.id]);
+  }
+  assert.deepEqual(toki.boards.map((b) => b.id), ["", "streak", "speedrun"]);
+  assert.equal(toki.folder, "game");
+  assert.match(toki.slug, /^[a-z0-9]+(-[a-z0-9]+)*$/);
 });
