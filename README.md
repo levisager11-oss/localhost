@@ -18,6 +18,8 @@ It looks like a monitoring dashboard (think Grafana), has sound, and is in Engli
   and, last of all, a Raspberry Pi on a desk in a bedroom. Owning 10, 25, 50… of one kind
   doubles what each of them earns (after 400, every 100 more), and every machine has two
   upgrades of its own.
+- **Selling**: switch the shop from Buy to Sell to get rid of machines, power, cooling or staff.
+  You get back half of what they cost (it doesn't count as income).
 - **Power**: more machines than your supply can take, and the breaker keeps tripping. Income
   drops fast.
 - **Cooling**: above 35 °C the machines slow down; near 50 °C they barely run.

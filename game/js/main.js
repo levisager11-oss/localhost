@@ -2,7 +2,7 @@
 import { ACHIEVEMENT_ICONS, ACHIEVEMENTS, COOLING, PERKS, POWER, STAFF, TIERS, UPGRADES } from "./data.js";
 import {
   applyOffline, beginRun, buy, buyPerk, buyUpgrade, canExit, click, costFor, derive, deserialize, exit, exitNeeds, exitShares,
-  freeShares, incidentAction, incidentDef, maxAffordable, milestoneMult, newState, nextMilestone, perkCost, perkLevels, perkOpen, priceMult,
+  freeShares, incidentAction, incidentDef, sell, sellValue, maxAffordable, milestoneMult, newState, nextMilestone, perkCost, perkLevels, perkOpen, priceMult,
   score, serialize, shareBonus, slaTier, TEMP_HOT, TEMP_OK, tick, upgradeCost, upgradeOffered,
 } from "./sim.js";
 import { browserLang, FLAVOR, getLang, setLang, t, upgradeText } from "./i18n.js";
@@ -43,6 +43,8 @@ const inToki = window.parent !== window;
 let state;
 let d;
 let tab = "hw";
+/** Whether the shop sells instead of buys. Not saved: a new visit starts by buying. */
+let selling = false;
 let paused = false;
 let last = performance.now();
 /** What the last alert ended with, shown for a few seconds */
@@ -361,7 +363,11 @@ function buildShop() {
   box.textContent = "";
   rows = [];
   for (const b of $("tabs").children) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
-  for (const b of $("amount").querySelectorAll("button")) b.setAttribute("aria-pressed", String(String(state.buyMode ?? 1) === b.dataset.n));
+  for (const b of $("amount").querySelectorAll("[data-n]")) b.setAttribute("aria-pressed", String(String(state.buyMode ?? 1) === b.dataset.n));
+  for (const b of $("side").children) b.setAttribute("aria-pressed", String((b.dataset.side === "sell") === selling));
+  $("side").lastElementChild.title = t("shop.sell.hint");
+  $("amount").querySelector('[data-n="max"]').textContent = t(selling ? "shop.all" : "shop.max");
+  box.classList.toggle("selling", selling);
   $("amount").hidden = tab === "up";
   $("shop-note").hidden = tab !== "st";
   // The procurement bot can be switched off where it shops: power and cooling.
@@ -425,7 +431,7 @@ function buildShop() {
 
 function drawShop() {
   const ids = tab === "up" ? `${offered().map((u) => u.id)}|${state.up.length}` : visible(tab).shown.map((x) => x.id).join();
-  const key = `${getLang()}|${tab}|${state.buyMode}|${!!state.perks.autoinfra}|${!!state.botOff}|${ids}`;
+  const key = `${getLang()}|${tab}|${state.buyMode}|${selling}|${!!state.perks.autoinfra}|${!!state.botOff}|${ids}`;
   if (key !== shopKey) {
     shopKey = key;
     buildShop();
@@ -441,11 +447,21 @@ function drawShop() {
       continue;
     }
     const owned = state[tab][r.item.id];
+    setText(r.count, owned ? `×${num(owned)}` : "");
+    if (selling) {
+      const n = mode === "max" ? owned : Math.min(mode, owned);
+      const value = sellValue(state, tab, r.item.id, n);
+      r.b.disabled = n < 1;
+      setText(r.cost, n < 1 ? "—" : n > 1 ? `×${n} · +${price(value)}` : `+${price(value)}`);
+      r.b.setAttribute("aria-label", `${t("shop.sell", { name: t(`${tab}.${r.item.id}.name`), cost: price(value) })}. ${t("shop.owned", { n: owned })}`);
+      setText(r.fx, effectText(tab, r.item));
+      setText(r.warn, "");
+      continue;
+    }
     const can = maxAffordable(tab, r.item.id, owned, state.money, mult);
     const n = mode === "max" ? Math.max(1, can) : mode;
     const cost = costFor(tab, r.item.id, owned, n, mult);
     r.b.disabled = can < n;
-    setText(r.count, owned ? `×${num(owned)}` : "");
     setText(r.cost, n > 1 ? `×${n} · ${price(cost)}` : price(cost));
     r.b.setAttribute("aria-label", `${t("shop.buy", { name: t(`${tab}.${r.item.id}.name`), cost: r.cost.textContent })}. ${t("shop.owned", { n: owned })}`);
     let fx = effectText(tab, r.item);
@@ -705,6 +721,12 @@ function wire() {
     save();
     drawShop();
   });
+  $("side").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-side]");
+    if (!b) return;
+    selling = b.dataset.side === "sell";
+    drawShop();
+  });
   $("amount").addEventListener("click", (e) => {
     const b = e.target.closest("[data-n]");
     if (!b) return;
@@ -719,6 +741,14 @@ function wire() {
       if (buyUpgrade(state, u.id)) {
         play("upgrade");
         log("info", t("log.upgrade", { name: upgradeText(u, "name") }));
+        save();
+      }
+    } else if (selling) {
+      const value = sellValue(state, tab, b.dataset.id, state.buyMode === "max" ? Infinity : (state.buyMode ?? 1));
+      const n = sell(state, tab, b.dataset.id, state.buyMode ?? 1);
+      if (n) {
+        play("buy");
+        log("info", t("log.sold", { n: num(n), name: t(`${tab}.${b.dataset.id}.name`), v: price(value) }));
         save();
       }
     } else if (buy(state, tab, b.dataset.id, state.buyMode ?? 1)) {

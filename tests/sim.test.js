@@ -5,7 +5,7 @@ import { ACHIEVEMENT_ICONS, ACHIEVEMENTS, COOLING, INCIDENTS, PERKS, POWER, RELE
 import {
   applyOffline, beginRun, buy, buyPerk, buyUpgrade, canExit, click, costFor, derive, deserialize, exit, exitShares, freeShares,
   incidentAction, incidentDef, maxAffordable, milestoneMult, newState, nextMilestone, perkCost, priceMult, score, serialize, slaMult,
-  spentShares, tick, upgradeOffered,
+  sell, sellValue, spentShares, tick, upgradeOffered,
 } from "../game/js/sim.js";
 import { setLang, TEXTS, upgradeText } from "../game/js/i18n.js";
 import { num, watts } from "../game/js/format.js";
@@ -486,4 +486,31 @@ test("big numbers still read well", () => {
 test("every stage has a picture", () => {
   const scene = readFileSync(new URL("../game/js/scene.js", import.meta.url), "utf8");
   for (const stage of STAGES) assert.match(scene, new RegExp(`\\n    ${stage}\\(\\) \\{`), stage);
+});
+
+test("selling gives back half, and doesn't count as income", () => {
+  const s = newState(0);
+  s.money = 1000;
+  assert.equal(buy(s, "hw", "pi", 5), 5);
+  const paid = costFor("hw", "pi", 1, 5);
+  const before = { money: s.money, run: s.runEarned, total: s.totalEarned };
+  assert.ok(Math.abs(sellValue(s, "hw", "pi", 5) - paid / 2) < 1e-9);
+  assert.equal(sell(s, "hw", "pi", 5), 5);
+  assert.equal(s.hw.pi, 1);
+  assert.ok(Math.abs(s.money - before.money - paid / 2) < 1e-9);
+  assert.equal(s.runEarned, before.run, "no stock options from selling");
+  assert.equal(s.totalEarned, before.total);
+  // Asking for more than you own sells what there is; "max" sells all.
+  s.pw.strip = 3;
+  assert.equal(sell(s, "pw", "strip", 10), 3);
+  assert.equal(sell(s, "pw", "strip", 1), 0, "nothing left");
+  s.cl.fan = 4;
+  assert.equal(sell(s, "cl", "fan", "max"), 4);
+  assert.equal(sell(s, "hw", "nope", 1), 0);
+  // Buying and selling again never makes money.
+  s.money = 1e6;
+  const m = s.money;
+  buy(s, "hw", "laptop", 10);
+  sell(s, "hw", "laptop", 10);
+  assert.ok(s.money < m);
 });
