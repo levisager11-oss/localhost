@@ -234,7 +234,7 @@ kbd { font: 500 11px var(--mono); border: 1px solid currentColor; border-radius:
 .tabs button[aria-selected="true"] { color: var(--text); }
 .tabs button[aria-selected="true"]::before { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; border-radius: 2px; background: linear-gradient(90deg, #f55f3e 0%, #ff8833 100%); }
 .tabs button.has::after { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--blue); margin-left: 5px; vertical-align: 2px; }
-.amount { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-size: 12px; padding: 4px 0 2px; }
+.amount { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--text-2); font-size: 12px; padding: 4px 0 2px; }
 .radio { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 2px; padding: 1px; background: var(--canvas); }
 .radio button { background: none; border: 0; border-radius: 1px; padding: 0 10px; height: 24px; color: var(--text-2); font-size: 12px; font-weight: 500; }
 .radio button:hover { color: var(--text); }
@@ -269,6 +269,9 @@ button.item:disabled { cursor: default; }
 }
 button.item:hover:not(:disabled) .cost { background: var(--primary-hover); }
 button.item:disabled .cost { background: rgba(204, 204, 220, 0.06); color: var(--text-3); }
+/* Selling: the price is what you get back */
+#shop.selling button.item:not(:disabled) .cost { background: transparent; color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+#shop.selling button.item:hover:not(:disabled) .cost { background: rgba(115, 191, 105, 0.15); }
 .item.locked strong { color: var(--text-2); }
 .item.locked .cost, .item.owned .cost { background: none; color: var(--text-3); min-width: 0; }
 .item.owned .cost { color: var(--green); }

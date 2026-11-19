@@ -249,6 +249,29 @@ export function buy(s, kind, id, n = 1, now = Date.now()) {
   return want;
 }
 
+/** Selling gives back this share of what the last ones cost. */
+export const SELL_BACK = 0.5;
+/** What selling the last n of something you own brings. */
+export function sellValue(s, kind, id, n = 1) {
+  const owned = s[kind]?.[id] ?? 0;
+  const k = Math.min(n, owned);
+  if (k < 1) return 0;
+  return costFor(kind, id, owned - k, k, priceMult(s, kind)) * SELL_BACK;
+}
+/**
+ * Sells up to n (or all of them for "max"); returns how many it sold. The money from a sale is
+ * not income: it doesn't count towards stock options or the score.
+ */
+export function sell(s, kind, id, n = 1) {
+  if (!KINDS[kind]?.some((x) => x.id === id)) return 0;
+  const owned = s[kind][id];
+  const k = n === "max" ? owned : Math.min(n, owned);
+  if (!(k >= 1)) return 0;
+  s.money += sellValue(s, kind, id, k);
+  s[kind][id] -= k;
+  return k;
+}
+
 /** Whether an upgrade is on offer: a machine's upgrades once you own enough of it, the others once you could nearly pay for them. */
 export function upgradeOffered(s, u) {
   if (s.up.includes(u.id)) return false;
