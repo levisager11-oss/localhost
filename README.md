@@ -33,7 +33,8 @@ It looks like a monitoring dashboard (think Grafana), has sound, and is in Engli
 - **Reincarnation**: sell the company and you are reborn in the bedroom with stock options.
   Each one adds 2% income, forever. Right after the sale, and only then, you spend them on
   sixteen upgrades that last through every life: seed money, your old hardware, a macro keyboard
-  that clicks for you, a bot that buys power and cooling, cheaper hardware and staff, outage
+  that clicks for you, a bot that buys power and cooling (it has a switch in the Power and
+  Cooling tabs), cheaper hardware and staff, outage
   insurance, and compound interest, which has no last level.
 - **No end**: after the last machine there is always something more. New versions of localhost
   (2.0, 3.0, … up to 90.0) each earn half as much again, every 100 more of a machine double its

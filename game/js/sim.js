@@ -94,7 +94,8 @@ function effects(s) {
   fx.compound = PERK.compound.per ** (p.compound ?? 0);
   fx.luck = 1 + (p.luck ?? 0);
   fx.autoclick = p.autoclick ? PERK.autoclick.values[p.autoclick - 1] : 0;
-  fx.autoinfra = !!p.autoinfra;
+  // The procurement bot works only while it's switched on.
+  fx.autoinfra = !!p.autoinfra && !s.botOff;
   return fx;
 }
 
@@ -568,7 +569,7 @@ export function exit(s, now = Date.now()) {
   fresh.totalEarned = s.totalEarned;
   fresh.ach = [...s.ach];
   fresh.stats = { ...fresh.stats, clicks: s.stats.clicks, resolved: s.stats.resolved, failed: s.stats.failed, auto: s.stats.auto, bestStreak: s.stats.bestStreak, exits: s.stats.exits + 1, played: s.stats.played, speedrun: s.stats.speedrun };
-  for (const k of ["lang", "buyMode", "muted"]) if (s[k] != null) fresh[k] = s[k];
+  for (const k of ["lang", "buyMode", "muted", "botOff"]) if (s[k] != null) fresh[k] = s[k];
   fresh.reborn = true;
   return fresh;
 }
@@ -622,6 +623,7 @@ export function deserialize(text, now = Date.now()) {
   if (o.lang === "en" || o.lang === "de") s.lang = o.lang;
   if (o.buyMode === 1 || o.buyMode === 10 || o.buyMode === "max") s.buyMode = o.buyMode;
   if (o.muted === true) s.muted = true;
+  if (o.botOff === true) s.botOff = true;
   if (o.reborn === true) s.reborn = true;
   return s;
 }

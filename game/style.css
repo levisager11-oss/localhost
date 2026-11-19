@@ -239,6 +239,14 @@ kbd { font: 500 11px var(--mono); border: 1px solid currentColor; border-radius:
 .radio button { background: none; border: 0; border-radius: 1px; padding: 0 10px; height: 24px; color: var(--text-2); font-size: 12px; font-weight: 500; }
 .radio button:hover { color: var(--text); }
 .radio button[aria-pressed="true"] { background: var(--secondary); color: var(--text); }
+/* The procurement bot: a switch on the right of the buy row */
+.switch { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.switch input { appearance: none; position: relative; width: 28px; height: 16px; margin: 0; border-radius: 8px; background: var(--border-strong); cursor: pointer; transition: background 0.15s; }
+.switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--text-2); transition: transform 0.15s, background 0.15s; }
+.switch input:checked { background: var(--blue); }
+.switch input:checked::after { transform: translateX(12px); background: #fff; }
+.switch input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.switch:hover { color: var(--text); }
 #shop { display: flex; flex-direction: column; margin: 0 -8px -8px; }
 .item {
   display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;

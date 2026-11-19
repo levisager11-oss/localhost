@@ -364,6 +364,10 @@ function buildShop() {
   for (const b of $("amount").querySelectorAll("button")) b.setAttribute("aria-pressed", String(String(state.buyMode ?? 1) === b.dataset.n));
   $("amount").hidden = tab === "up";
   $("shop-note").hidden = tab !== "st";
+  // The procurement bot can be switched off where it shops: power and cooling.
+  $("bot").hidden = !state.perks.autoinfra || (tab !== "pw" && tab !== "cl");
+  $("bot-on").checked = !state.botOff;
+  $("bot").title = t(state.botOff ? "shop.bot.off" : "shop.bot.on");
 
   if (tab === "up") {
     const open = offered();
@@ -421,7 +425,7 @@ function buildShop() {
 
 function drawShop() {
   const ids = tab === "up" ? `${offered().map((u) => u.id)}|${state.up.length}` : visible(tab).shown.map((x) => x.id).join();
-  const key = `${getLang()}|${tab}|${state.buyMode}|${ids}`;
+  const key = `${getLang()}|${tab}|${state.buyMode}|${!!state.perks.autoinfra}|${!!state.botOff}|${ids}`;
   if (key !== shopKey) {
     shopKey = key;
     buildShop();
@@ -693,6 +697,13 @@ function wire() {
     tab = b.dataset.tab;
     drawShop();
     $("shop").scrollTop = 0;
+  });
+  $("bot-on").addEventListener("change", (e) => {
+    if (e.target.checked) delete state.botOff;
+    else state.botOff = true;
+    log("info", t(state.botOff ? "log.bot.off" : "log.bot.on"));
+    save();
+    drawShop();
   });
   $("amount").addEventListener("click", (e) => {
     const b = e.target.closest("[data-n]");
