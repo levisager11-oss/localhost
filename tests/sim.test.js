@@ -275,6 +275,18 @@ test("reincarnation upgrades cost stock options and shape the next life", () => 
   s.nextIncident = 1e9;
   for (let i = 0; i < 40; i++) tick(s, 0.25, () => 0.5);
   assert.ok(derive(s).load <= 0.9 && derive(s).coolLoad <= 0.9, "bought power and cooling by itself");
+  // Switched off, it leaves power and cooling alone, and stays off through a save and the next life.
+  s.botOff = true;
+  s.hw.laptop = 80;
+  const pw = { ...s.pw };
+  for (let i = 0; i < 40; i++) tick(s, 0.25, () => 0.5);
+  assert.deepEqual(s.pw, pw, "switched off: buys nothing");
+  assert.ok(derive(s).load > 0.9);
+  assert.equal(deserialize(serialize(s)).botOff, true);
+  s.runEarned = 1e12;
+  assert.equal(exit(s, 30).botOff, true);
+  delete s.botOff;
+  s.hw.laptop = 40;
   assert.ok(s.ach.includes("perk"));
   const again = deserialize(serialize(s));
   assert.deepEqual(again.perks, s.perks);
